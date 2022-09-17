@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	_ "embed"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 	"github.com/magodo/armid"
@@ -17,12 +20,42 @@ type AzureResource struct {
 	Properties map[string]interface{}
 }
 
+//go:embed armschema.json
+var armSchemaFile []byte
+
+type ARMSchemaTree map[string]ARMSchemaEntry
+
+type ARMSchemaEntry struct {
+	Children ARMSchemaTree
+	Versions []string
+}
+
 func List(ctx context.Context, subscriptionId, query string) (map[string]map[string]interface{}, error) {
 	client, err := NewClient(subscriptionId)
 	if err != nil {
 		return nil, fmt.Errorf("new client: %v", err)
 	}
 
+	rl, err := ListTrackedResources(ctx, client, subscriptionId, query)
+	if err != nil {
+		return nil, err
+	}
+
+	schemaTree, err := BuildARMSchemaTree(armSchemaFile)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = schemaTree
+
+	out := map[string]map[string]interface{}{}
+	for _, res := range rl {
+		out[res.Id.String()] = res.Properties
+	}
+	return out, nil
+}
+
+func ListTrackedResources(ctx context.Context, client *Client, subscriptionId string, query string) ([]AzureResource, error) {
 	const top int32 = 1000
 
 	queryReq := armresourcegraph.QueryRequest{
@@ -104,10 +137,62 @@ func List(ctx context.Context, subscriptionId, query string) (map[string]map[str
 			skipToken = *resp.SkipToken
 		}
 	}
+	return rl, nil
+}
 
-	out := map[string]map[string]interface{}{}
-	for _, res := range rl {
-		out[res.Id.String()] = res.Properties
+func BuildARMSchemaTree(armSchemaFile []byte) (ARMSchemaTree, error) {
+	var armSchemas map[string][]string
+	if err := json.Unmarshal(armSchemaFile, &armSchemas); err != nil {
+		return nil, err
 	}
-	return out, nil
+
+	tree := ARMSchemaTree{}
+	level := 2
+
+	// Ensure every resoruce type starts with a provider and followed by one or more types, separated by slash(es).
+	for rt := range armSchemas {
+		if len(strings.Split(rt, "/")) == 1 {
+			return nil, fmt.Errorf("malformed resource type: %s", rt)
+		}
+	}
+
+	remains := len(armSchemas)
+
+	for remains > 0 {
+		var used []string
+		for rt, versions := range armSchemas {
+			// The resource types in the schema file are not consistent on casing between parent and child resources.
+			upperRt := strings.ToUpper(rt)
+			segs := strings.Split(upperRt, "/")
+			if len(segs) == level {
+				used = append(used, rt)
+				ptree := tree
+				for n := 2; n < level; n++ {
+					prt := strings.Join(segs[:n], "/")
+					parent, ok := ptree[prt]
+					if !ok {
+						// Not all resource types are guaranteed to have its parent resource type defined in the arm schema,
+						// that is all of the resource types defined in the arm schema are PUTable, but some parent resource types
+						// might not.
+						// Hence we will simply break the parent lookup here and fallback to insert the current resource type to the tree directly.
+						break
+					}
+					ptree = parent.Children
+				}
+				ptree[upperRt] = ARMSchemaEntry{
+					Children: ARMSchemaTree{},
+					Versions: versions,
+				}
+			}
+		}
+
+		for _, rt := range used {
+			delete(armSchemas, rt)
+		}
+
+		level += 1
+		remains = len(armSchemas)
+	}
+
+	return tree, nil
 }
