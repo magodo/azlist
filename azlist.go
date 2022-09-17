@@ -23,7 +23,7 @@ type AzureResource struct {
 //go:embed armschema.json
 var armSchemaFile []byte
 
-type ARMSchemaTree map[string]ARMSchemaEntry
+type ARMSchemaTree map[string]*ARMSchemaEntry
 
 type ARMSchemaEntry struct {
 	Children ARMSchemaTree
@@ -166,22 +166,17 @@ func BuildARMSchemaTree(armSchemaFile []byte) (ARMSchemaTree, error) {
 			segs := strings.Split(upperRt, "/")
 			if len(segs) == level {
 				used = append(used, rt)
-				ptree := tree
-				for n := 2; n < level; n++ {
-					prt := strings.Join(segs[:n], "/")
-					parent, ok := ptree[prt]
-					if !ok {
-						// Not all resource types are guaranteed to have its parent resource type defined in the arm schema,
-						// that is all of the resource types defined in the arm schema are PUTable, but some parent resource types
-						// might not.
-						// Hence we will simply break the parent lookup here and fallback to insert the current resource type to the tree directly.
-						break
-					}
-					ptree = parent.Children
-				}
-				ptree[upperRt] = ARMSchemaEntry{
+				entry := ARMSchemaEntry{
 					Children: ARMSchemaTree{},
 					Versions: versions,
+				}
+				tree[upperRt] = &entry
+				prt := strings.Join(segs[:level-1], "/")
+				if parent, ok := tree[prt]; ok {
+					// Not all resource types are guaranteed to have its parent resource type defined in the arm schema,
+					// that is all of the resource types defined in the arm schema are PUTable, but some parent resource types
+					// might not.
+					parent.Children[segs[level-1]] = &entry
 				}
 			}
 		}
