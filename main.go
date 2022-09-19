@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/magodo/azlist/azlist"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -45,7 +46,7 @@ func main() {
 				return fmt.Errorf("More than one queries specified")
 			}
 
-			rl, err := List(ctx.Context, flagSubscriptionId, ctx.Args().First(), nil)
+			rl, err := azlist.List(ctx.Context, flagSubscriptionId, ctx.Args().First(), nil)
 			if err != nil {
 				return err
 			}

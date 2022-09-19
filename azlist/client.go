@@ -1,4 +1,4 @@
-package main
+package azlist
 
 import (
 	"fmt"
