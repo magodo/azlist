@@ -1,16 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/urfave/cli/v2"
-	"golang.org/x/exp/slices"
 )
 
 func main() {
 	var (
 		flagSubscriptionId string
+		flagWithBody       bool
 	)
 
 	app := &cli.App{
@@ -28,6 +29,13 @@ func main() {
 				Usage:       "The subscription id",
 				Destination: &flagSubscriptionId,
 			},
+			&cli.BoolFlag{
+				Name:        "with-body",
+				EnvVars:     []string{"AZLIST_WITH_BODY"},
+				Aliases:     []string{"b"},
+				Usage:       "Print each resource's body",
+				Destination: &flagWithBody,
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			if ctx.NArg() == 0 {
@@ -37,18 +45,17 @@ func main() {
 				return fmt.Errorf("More than one queries specified")
 			}
 
-			rset, err := List(ctx.Context, flagSubscriptionId, ctx.Args().First())
+			rl, err := List(ctx.Context, flagSubscriptionId, ctx.Args().First(), nil)
 			if err != nil {
 				return err
 			}
 
-			var rl []string
-			for id := range rset {
-				rl = append(rl, id)
-			}
-			slices.Sort(rl)
-			for _, id := range rl {
-				fmt.Println(id)
+			for _, res := range rl {
+				fmt.Println(res.Id)
+				if flagWithBody {
+					b, _ := json.MarshalIndent(res.Properties, "", "  ")
+					fmt.Println(string(b))
+				}
 			}
 			return nil
 		},
