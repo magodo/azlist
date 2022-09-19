@@ -36,7 +36,8 @@ type ARMSchemaEntry struct {
 }
 
 type Option struct {
-	Parallelism int
+	Parallelism    int
+	IncludeManaged bool
 }
 
 func defaultOption() *Option {
@@ -68,6 +69,17 @@ func List(ctx context.Context, subscriptionId, query string, opt *Option) ([]Azu
 	rl, err = ListChildResource(ctx, client, schemaTree, rl, opt.Parallelism)
 	if err != nil {
 		return nil, err
+	}
+
+	if !opt.IncludeManaged {
+		orl := rl[:]
+		rl = []AzureResource{}
+		for _, res := range orl {
+			if v, ok := res.Properties["managedBy"]; ok && v != "" {
+				continue
+			}
+			rl = append(rl, res)
+		}
 	}
 
 	return rl, nil
@@ -237,6 +249,7 @@ func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchema
 		})
 
 		for _, res := range rl {
+			res := res
 			wp.AddTask(func() (interface{}, error) {
 				return listDirectChildResource(ctx, client, schemaTree, res)
 			})

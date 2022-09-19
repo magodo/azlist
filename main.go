@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/magodo/azlist/azlist"
 	"os"
+
+	"github.com/magodo/azlist/azlist"
 
 	"github.com/urfave/cli/v2"
 )
@@ -13,6 +14,8 @@ func main() {
 	var (
 		flagSubscriptionId string
 		flagWithBody       bool
+		flagIncludeManaged bool
+		flagParallelism    int
 	)
 
 	app := &cli.App{
@@ -37,6 +40,20 @@ func main() {
 				Usage:       "Print each resource's body",
 				Destination: &flagWithBody,
 			},
+			&cli.BoolFlag{
+				Name:        "include-managed",
+				EnvVars:     []string{"AZLIST_INCLUDE_MANAGED"},
+				Usage:       "Include resource whose lifecycle is managed by others (i.e. contains `managedBy` in its body)",
+				Destination: &flagIncludeManaged,
+			},
+			&cli.IntFlag{
+				Name:        "parallelism",
+				EnvVars:     []string{"AZLIST_PARALLELISM"},
+				Aliases:     []string{"p"},
+				Usage:       "Limit the number of parallel operations to list resources",
+				Value:       10,
+				Destination: &flagParallelism,
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			if ctx.NArg() == 0 {
@@ -46,7 +63,12 @@ func main() {
 				return fmt.Errorf("More than one queries specified")
 			}
 
-			rl, err := azlist.List(ctx.Context, flagSubscriptionId, ctx.Args().First(), nil)
+			opt := &azlist.Option{
+				Parallelism:    flagParallelism,
+				IncludeManaged: flagIncludeManaged,
+			}
+
+			rl, err := azlist.List(ctx.Context, flagSubscriptionId, ctx.Args().First(), opt)
 			if err != nil {
 				return err
 			}
