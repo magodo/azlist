@@ -46,7 +46,22 @@ func defaultOption() *Option {
 	}
 }
 
-func List(ctx context.Context, subscriptionId, query string, opt *Option) ([]AzureResource, error) {
+type ListError struct {
+	Endpoint string
+	Version  string
+	Message  string
+}
+
+func (e ListError) Error() string {
+	return fmt.Sprintf("Listing %s (api-version=%s): %s", e.Endpoint, e.Version, e.Message)
+}
+
+type ListResult struct {
+	Resources []AzureResource
+	Errors    []ListError
+}
+
+func List(ctx context.Context, subscriptionId, query string, opt *Option) (*ListResult, error) {
 	if opt == nil {
 		opt = defaultOption()
 	}
@@ -66,13 +81,13 @@ func List(ctx context.Context, subscriptionId, query string, opt *Option) ([]Azu
 		return nil, err
 	}
 
-	rl, err = ListChildResource(ctx, client, schemaTree, rl, opt.Parallelism)
+	result, err := ListChildResource(ctx, client, schemaTree, rl, opt.Parallelism)
 	if err != nil {
 		return nil, err
 	}
 
 	if !opt.IncludeManaged {
-		orl := rl[:]
+		orl := result.Resources[:]
 		rl = []AzureResource{}
 		for _, res := range orl {
 			if v, ok := res.Properties["managedBy"]; ok && v != "" {
@@ -80,9 +95,10 @@ func List(ctx context.Context, subscriptionId, query string, opt *Option) ([]Azu
 			}
 			rl = append(rl, res)
 		}
+		result.Resources = rl
 	}
 
-	return rl, nil
+	return result, nil
 }
 
 func ListTrackedResources(ctx context.Context, client *Client, subscriptionId string, query string) ([]AzureResource, error) {
@@ -223,7 +239,8 @@ func BuildARMSchemaTree(armSchemaFile []byte) (ARMSchemaTree, error) {
 }
 
 // ListChildResource will recursively list the direct child resources of each given resource, and returns the passed resource list with their child resources appended.
-func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchemaTree, rl []AzureResource, parallelsim int) ([]AzureResource, error) {
+// Some resource type might fail to list, which will be returned in the ListError slice.
+func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchemaTree, rl []AzureResource, parallelsim int) (*ListResult, error) {
 	if parallelsim == 0 {
 		parallelsim = runtime.NumCPU()
 	}
@@ -233,30 +250,31 @@ func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchema
 		rset[strings.ToUpper(res.Id.String())] = res
 	}
 
-	type listResult struct {
-		children []AzureResource
-		err      error
-	}
+	eset := map[string]ListError{}
 
 	for len(rl) != 0 {
 		wp := workerpool.NewWorkPool(parallelsim)
 
-		var nrl []AzureResource
+		var (
+			nrl []AzureResource
+			nel []ListError
+		)
 		wp.Run(func(i interface{}) error {
-			l := i.([]AzureResource)
-			nrl = append(nrl, l...)
+			l := i.(ListResult)
+			nrl = append(nrl, l.Resources...)
+			nel = append(nel, l.Errors...)
 			return nil
 		})
 
 		for _, res := range rl {
 			res := res
 			wp.AddTask(func() (interface{}, error) {
-				return listDirectChildResource(ctx, client, schemaTree, res)
+				return listDirectChildResource(ctx, client, schemaTree, res), nil
 			})
 		}
 
 		if err := wp.Done(); err != nil {
-			return nil, err
+			return nil, nil
 		}
 
 		// Add newly child resources to the resource set, also put them into the working list for new iteration.
@@ -269,25 +287,50 @@ func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchema
 			rl = append(rl, res)
 			rset[key] = res
 		}
+		for _, le := range nel {
+			key := strings.ToUpper(le.Endpoint)
+			if _, ok := eset[key]; ok {
+				continue
+			}
+			eset[key] = le
+		}
 	}
 
-	// Sort rset and return
-	var out []AzureResource
+	// Sort rset and eset and return
+	var out ListResult
 	for _, res := range rset {
-		out = append(out, res)
+		out.Resources = append(out.Resources, res)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Id.String() < out[j].Id.String()
+	for _, le := range eset {
+		out.Errors = append(out.Errors, le)
+	}
+	sort.Slice(out.Resources, func(i, j int) bool {
+		return out.Resources[i].Id.String() < out.Resources[j].Id.String()
 	})
-	return out, nil
+	sort.Slice(out.Errors, func(i, j int) bool {
+		return out.Errors[i].Endpoint < out.Errors[j].Endpoint
+	})
+	return &out, nil
 }
 
 // listDirectChildResource list one resource's direct child resources based on the ARM schema resource type hierarchy.
-// If no child resource exists, a nil slice is returned.
-func listDirectChildResource(ctx context.Context, client *Client, schemaTree ARMSchemaTree, res AzureResource) ([]AzureResource, error) {
+func listDirectChildResource(ctx context.Context, client *Client, schemaTree ARMSchemaTree, res AzureResource) ListResult {
 	pid := res.Id
 	rt := strings.ToUpper(strings.TrimLeft(pid.RouteScopeString(), "/"))
-	var out []AzureResource
+
+	result := ListResult{
+		Resources: []AzureResource{},
+		Errors:    []ListError{},
+	}
+
+	addListError := func(pid armid.ResourceId, childRt, apiVersion string, err error) {
+		result.Errors = append(result.Errors, ListError{
+			Endpoint: strings.ToUpper(pid.String() + "/" + childRt),
+			Version:  apiVersion,
+			Message:  err.Error(),
+		})
+	}
+
 	for crt, entry := range schemaTree[rt].Children {
 		version := entry.Versions[len(entry.Versions)-1]
 		pager := client.resource.NewListChildPager(pid.String(), crt, version)
@@ -298,27 +341,32 @@ func listDirectChildResource(ctx context.Context, client *Client, schemaTree ARM
 					// Intentionally ignore 404 on list.
 					break
 				}
-				return nil, fmt.Errorf("listing %s (api-version=%s): %v", strings.ToUpper(pid.String()+"/"+crt), version, err)
+				// For other errors, record into the list result
+				addListError(pid, crt, version, err)
+				break
 			}
 			for _, w := range page.Value {
 				b, err := json.Marshal(w)
 				if err != nil {
-					return nil, fmt.Errorf("marshalling %v: %v", w, err)
+					addListError(pid, crt, version, fmt.Errorf("marshalling %v: %v", w, err))
+					continue
 				}
 				var props map[string]interface{}
 				if err := json.Unmarshal(b, &props); err != nil {
-					return nil, fmt.Errorf("unmarshalling %v: %v", string(b), err)
+					addListError(pid, crt, version, fmt.Errorf("unmarshalling %v: %v", string(b), err))
+					continue
 				}
 				id, err := armid.ParseResourceId(props["id"].(string))
 				if err != nil {
-					return nil, fmt.Errorf("parsing resource id %v: %v", props["id"], err)
+					addListError(pid, crt, version, fmt.Errorf("parsing resource id %v: %v", props["id"], err))
+					continue
 				}
-				out = append(out, AzureResource{
+				result.Resources = append(result.Resources, AzureResource{
 					Id:         id,
 					Properties: props,
 				})
 			}
 		}
 	}
-	return out, nil
+	return result
 }

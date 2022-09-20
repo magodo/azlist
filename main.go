@@ -16,6 +16,7 @@ func main() {
 		flagWithBody       bool
 		flagIncludeManaged bool
 		flagParallelism    int
+		flagPrintError     bool
 	)
 
 	app := &cli.App{
@@ -54,6 +55,13 @@ func main() {
 				Value:       10,
 				Destination: &flagParallelism,
 			},
+			&cli.BoolFlag{
+				Name:        "print-error",
+				Aliases:     []string{"e"},
+				EnvVars:     []string{"AZLIST_PRINT_ERROR"},
+				Usage:       "Print errors received during listing resources",
+				Destination: &flagPrintError,
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			if ctx.NArg() == 0 {
@@ -68,18 +76,29 @@ func main() {
 				IncludeManaged: flagIncludeManaged,
 			}
 
-			rl, err := azlist.List(ctx.Context, flagSubscriptionId, ctx.Args().First(), opt)
+			result, err := azlist.List(ctx.Context, flagSubscriptionId, ctx.Args().First(), opt)
 			if err != nil {
 				return err
 			}
 
-			for _, res := range rl {
+			if flagPrintError {
+				if len(result.Errors) != 0 {
+					fmt.Println("Listing errors:")
+					for _, err := range result.Errors {
+						fmt.Printf("\t%v\n", err)
+					}
+					fmt.Println()
+				}
+			}
+
+			for _, res := range result.Resources {
 				fmt.Println(res.Id)
 				if flagWithBody {
 					b, _ := json.MarshalIndent(res.Properties, "", "  ")
 					fmt.Println(string(b))
 				}
 			}
+
 			return nil
 		},
 	}
