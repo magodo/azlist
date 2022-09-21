@@ -61,7 +61,7 @@ type ListResult struct {
 	Errors    []ListError
 }
 
-func List(ctx context.Context, subscriptionId, query string, opt *Option) (*ListResult, error) {
+func List(ctx context.Context, subscriptionId, predicate string, opt *Option) (*ListResult, error) {
 	if opt == nil {
 		opt = defaultOption()
 	}
@@ -71,7 +71,7 @@ func List(ctx context.Context, subscriptionId, query string, opt *Option) (*List
 		return nil, fmt.Errorf("new client: %v", err)
 	}
 
-	rl, err := ListTrackedResources(ctx, client, subscriptionId, query)
+	rl, err := ListTrackedResources(ctx, client, subscriptionId, predicate)
 	if err != nil {
 		return nil, err
 	}
@@ -101,9 +101,10 @@ func List(ctx context.Context, subscriptionId, query string, opt *Option) (*List
 	return result, nil
 }
 
-func ListTrackedResources(ctx context.Context, client *Client, subscriptionId string, query string) ([]AzureResource, error) {
+func ListTrackedResources(ctx context.Context, client *Client, subscriptionId string, predicate string) ([]AzureResource, error) {
 	const top int32 = 1000
 
+	query := fmt.Sprintf("Resources | where %s | order by id desc", predicate)
 	queryReq := armresourcegraph.QueryRequest{
 		Query: &query,
 		Options: &armresourcegraph.QueryRequestOptions{

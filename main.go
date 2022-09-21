@@ -23,7 +23,7 @@ func main() {
 		Name:      "azlist",
 		Version:   getVersion(),
 		Usage:     "List Azure resources (including proxy resources)",
-		UsageText: "azlist [option] <ARG query>",
+		UsageText: "azlist [option] <ARG where predicate>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name: "subscription-id",
@@ -66,10 +66,10 @@ func main() {
 		},
 		Action: func(ctx *cli.Context) error {
 			if ctx.NArg() == 0 {
-				return fmt.Errorf("No query specified")
+				return fmt.Errorf("No ARG where predicate specified")
 			}
 			if ctx.NArg() > 1 {
-				return fmt.Errorf("More than one queries specified")
+				return fmt.Errorf("More than one where predicates specified")
 			}
 
 			opt := &azlist.Option{
