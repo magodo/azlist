@@ -22,7 +22,7 @@ func main() {
 	app := &cli.App{
 		Name:      "azlist",
 		Version:   getVersion(),
-		Usage:     "List Azure resources (including proxy resources)",
+		Usage:     "List Azure resources and its child resources by an Azure Resource Graph `where` predicate",
 		UsageText: "azlist [option] <ARG where predicate>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
