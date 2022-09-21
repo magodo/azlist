@@ -13,6 +13,7 @@ import (
 func main() {
 	var (
 		flagSubscriptionId string
+		flagRecursive      bool
 		flagWithBody       bool
 		flagIncludeManaged bool
 		flagParallelism    int
@@ -22,7 +23,7 @@ func main() {
 	app := &cli.App{
 		Name:      "azlist",
 		Version:   getVersion(),
-		Usage:     "List Azure resources and its child resources by an Azure Resource Graph `where` predicate",
+		Usage:     "List Azure resources by an Azure Resource Graph `where` predicate",
 		UsageText: "azlist [option] <ARG where predicate>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -33,6 +34,13 @@ func main() {
 				Required:    true,
 				Usage:       "The subscription id",
 				Destination: &flagSubscriptionId,
+			},
+			&cli.BoolFlag{
+				Name:        "recursive",
+				Aliases:     []string{"r"},
+				EnvVars:     []string{"AZLIST_RECURSIVE"},
+				Usage:       "Recursively list child resources of the query result",
+				Destination: &flagRecursive,
 			},
 			&cli.BoolFlag{
 				Name:        "with-body",
@@ -74,6 +82,7 @@ func main() {
 
 			opt := &azlist.Option{
 				Parallelism:    flagParallelism,
+				Recursive:      flagRecursive,
 				IncludeManaged: flagIncludeManaged,
 			}
 

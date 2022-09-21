@@ -37,6 +37,7 @@ type ARMSchemaEntry struct {
 
 type Option struct {
 	Parallelism    int
+	Recursive      bool
 	IncludeManaged bool
 }
 
@@ -74,6 +75,12 @@ func List(ctx context.Context, subscriptionId, predicate string, opt *Option) (*
 	rl, err := ListTrackedResources(ctx, client, subscriptionId, predicate)
 	if err != nil {
 		return nil, err
+	}
+
+	if !opt.Recursive {
+		return &ListResult{
+			Resources: rl,
+		}, nil
 	}
 
 	schemaTree, err := BuildARMSchemaTree(armSchemaFile)
@@ -184,6 +191,11 @@ func ListTrackedResources(ctx context.Context, client *Client, subscriptionId st
 			skipToken = *resp.SkipToken
 		}
 	}
+
+	sort.Slice(rl, func(i, j int) bool {
+		return rl[i].Id.String() < rl[j].Id.String()
+	})
+
 	return rl, nil
 }
 
