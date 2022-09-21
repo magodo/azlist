@@ -43,8 +43,9 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name:        "include-managed",
+				Aliases:     []string{"m"},
 				EnvVars:     []string{"AZLIST_INCLUDE_MANAGED"},
-				Usage:       "Include resource whose lifecycle is managed by others (i.e. contains `managedBy` in its body)",
+				Usage:       "Include resource whose lifecycle is managed by others",
 				Destination: &flagIncludeManaged,
 			},
 			&cli.IntFlag{
