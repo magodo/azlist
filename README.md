@@ -22,5 +22,6 @@ azlist 'resourceGroup =~ "example-rg"'
     
     **Answer**: This is because `azlist` will first make an ARG call with the given `where` predicate, then if `--recursive` is specified, it will recursively call the "LIST" on the *known* child resource types. In this case, since the subnet is not an ARM tracked resource, ARG returns nothing.
 
+- **Question**: Why isn't any data source listed in my application insight workspace?
 
-
+    **Answer**: The data source is a proxy resource, which is discovered by listing on its collection API endpoint. However, it requires some special parameters, in this case it is a `$filter = kind eq <foo>` query parameter. Currently, we didn't do any such special handlings for those endpoints (for the sake of maintainance). The same might happens for the other proxy resouce types. To have an overview of resources that hit error during discovery, you can specify the `--print-error`/`-e` option.
