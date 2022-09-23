@@ -13,6 +13,7 @@ import (
 func main() {
 	var (
 		flagSubscriptionId string
+		flagRecursive      bool
 		flagWithBody       bool
 		flagIncludeManaged bool
 		flagParallelism    int
@@ -22,8 +23,8 @@ func main() {
 	app := &cli.App{
 		Name:      "azlist",
 		Version:   getVersion(),
-		Usage:     "List Azure resources (including proxy resources)",
-		UsageText: "azlist [option] <ARG query>",
+		Usage:     "List Azure resources by an Azure Resource Graph `where` predicate",
+		UsageText: "azlist [option] <ARG where predicate>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name: "subscription-id",
@@ -35,6 +36,13 @@ func main() {
 				Destination: &flagSubscriptionId,
 			},
 			&cli.BoolFlag{
+				Name:        "recursive",
+				Aliases:     []string{"r"},
+				EnvVars:     []string{"AZLIST_RECURSIVE"},
+				Usage:       "Recursively list child resources of the query result",
+				Destination: &flagRecursive,
+			},
+			&cli.BoolFlag{
 				Name:        "with-body",
 				EnvVars:     []string{"AZLIST_WITH_BODY"},
 				Aliases:     []string{"b"},
@@ -43,8 +51,9 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name:        "include-managed",
+				Aliases:     []string{"m"},
 				EnvVars:     []string{"AZLIST_INCLUDE_MANAGED"},
-				Usage:       "Include resource whose lifecycle is managed by others (i.e. contains `managedBy` in its body)",
+				Usage:       "Include resource whose lifecycle is managed by others",
 				Destination: &flagIncludeManaged,
 			},
 			&cli.IntFlag{
@@ -65,14 +74,15 @@ func main() {
 		},
 		Action: func(ctx *cli.Context) error {
 			if ctx.NArg() == 0 {
-				return fmt.Errorf("No query specified")
+				return fmt.Errorf("No ARG where predicate specified")
 			}
 			if ctx.NArg() > 1 {
-				return fmt.Errorf("More than one queries specified")
+				return fmt.Errorf("More than one where predicates specified")
 			}
 
 			opt := &azlist.Option{
 				Parallelism:    flagParallelism,
+				Recursive:      flagRecursive,
 				IncludeManaged: flagIncludeManaged,
 			}
 
