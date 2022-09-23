@@ -26,7 +26,7 @@ type AzureResource struct {
 }
 
 //go:embed armschema.json
-var armSchemaFile []byte
+var ARMSchemaFile []byte
 
 type ARMSchemaTree map[string]*ARMSchemaEntry
 
@@ -76,7 +76,7 @@ func List(ctx context.Context, subscriptionId, query string, opt *Option) (*List
 		return nil, err
 	}
 
-	schemaTree, err := BuildARMSchemaTree(armSchemaFile)
+	schemaTree, err := BuildARMSchemaTree(ARMSchemaFile)
 	if err != nil {
 		return nil, err
 	}

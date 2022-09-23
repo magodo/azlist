@@ -83,8 +83,8 @@ func TestBuildARMSchemaTree(t *testing.T) {
 
 func TestBuildARMSchemaTree_WithRealSchema(t *testing.T) {
 	var armSchemas map[string][]string
-	require.NoError(t, json.Unmarshal(armSchemaFile, &armSchemas))
-	tree, err := BuildARMSchemaTree(armSchemaFile)
+	require.NoError(t, json.Unmarshal(ARMSchemaFile, &armSchemas))
+	tree, err := BuildARMSchemaTree(ARMSchemaFile)
 	require.NoError(t, err)
 	require.Equal(t, len(armSchemas), len(tree))
 }
