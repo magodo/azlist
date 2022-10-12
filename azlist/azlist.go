@@ -344,7 +344,12 @@ func listDirectChildResource(ctx context.Context, client *Client, schemaTree ARM
 		})
 	}
 
-	for crt, entry := range schemaTree[rt].Children {
+	schemaEntry := schemaTree[rt]
+	if schemaEntry == nil {
+		return result
+	}
+
+	for crt, entry := range schemaEntry.Children {
 		version := entry.Versions[len(entry.Versions)-1]
 		pager := client.resource.NewListChildPager(pid.String(), crt, version)
 		for pager.More() {
