@@ -374,13 +374,23 @@ func listDirectChildResource(ctx context.Context, client *Client, schemaTree ARM
 					addListError(pid, crt, version, fmt.Errorf("unmarshalling %v: %v", string(b), err))
 					continue
 				}
-				id, err := armid.ParseResourceId(props["id"].(string))
+				idraw, ok := props["id"]
+				if !ok {
+					addListError(pid, crt, version, fmt.Errorf("no resource id found in response: %s", string(b)))
+					continue
+				}
+				id, ok := idraw.(string)
+				if !ok {
+					addListError(pid, crt, version, fmt.Errorf("resource id is not a string: %s", string(b)))
+					continue
+				}
+				azureId, err := armid.ParseResourceId(id)
 				if err != nil {
-					addListError(pid, crt, version, fmt.Errorf("parsing resource id %v: %v", props["id"], err))
+					addListError(pid, crt, version, fmt.Errorf("parsing resource id %v: %v", id, err))
 					continue
 				}
 				result.Resources = append(result.Resources, AzureResource{
-					Id:         id,
+					Id:         azureId,
 					Properties: props,
 				})
 			}
