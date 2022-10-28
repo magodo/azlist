@@ -62,6 +62,7 @@ func NewClient(subscriptionId string) (*Client, error) {
 
 	opt := &arm.ClientOptions{
 		ClientOptions: policy.ClientOptions{
+			Cloud: cloudCfg,
 			Telemetry: policy.TelemetryOptions{
 				ApplicationID: "azlist",
 				Disabled:      false,
