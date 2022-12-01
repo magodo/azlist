@@ -111,6 +111,8 @@ func List(ctx context.Context, subscriptionId, predicate string, opt *Option) (*
 		result.Resources = rl
 	}
 
+	log.Printf("[INFO] %d resources are listed", len(result.Resources))
+
 	return result, nil
 }
 
