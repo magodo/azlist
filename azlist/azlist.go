@@ -287,7 +287,7 @@ func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchema
 		}
 
 		if err := wp.Done(); err != nil {
-			return nil, nil
+			return nil, err
 		}
 
 		// Add newly child resources to the resource set, also put them into the working list for new iteration.
