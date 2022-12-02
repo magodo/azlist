@@ -20,7 +20,7 @@ azlist 'resourceGroup =~ "example-rg"'
 
 - **Question**: Why predicate `type =~ "microsoft.network/virtualnetworks/subnets"` returns me nothing, even with `--recursive`?
     
-    **Answer**: This is because `azlist` will first make an ARG call with the given `where` predicate, then if `--recursive` is specified, it will recursively call the "LIST" on the *known* child resource types. In this case, since the subnet is not an ARM tracked resource, ARG returns nothing.
+    **Answer**: This is because `azlist` will first make an ARG call with the given `where` predicate, then if `--recursive` is specified, it will recursively call the "LIST" on the *known* child resource types. In this case, since the subnet is not an ARM tracked resource, ARG returns nothing. The full list of supported resource types by ARG can be found [here](https://learn.microsoft.com/en-us/azure/governance/resource-graph/reference/supported-tables-resources#resources).
 
 - **Question**: Why isn't any data source listed in my application insight workspace?
 
