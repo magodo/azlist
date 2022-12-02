@@ -67,11 +67,14 @@ func List(ctx context.Context, subscriptionId, predicate string, opt *Option) (*
 		opt = defaultOption()
 	}
 
+	log.Printf("[INFO] List for subscription %s via predicate %s, with option %#v", subscriptionId, predicate, opt)
+
 	client, err := NewClient(subscriptionId)
 	if err != nil {
 		return nil, fmt.Errorf("new client: %v", err)
 	}
 
+	log.Printf("[INFO] Listing tracked resources")
 	rl, err := ListTrackedResources(ctx, client, subscriptionId, predicate)
 	if err != nil {
 		return nil, err
@@ -83,11 +86,13 @@ func List(ctx context.Context, subscriptionId, predicate string, opt *Option) (*
 		}, nil
 	}
 
+	log.Printf("[INFO] Build ARM schema tree")
 	schemaTree, err := BuildARMSchemaTree(ARMSchemaFile)
 	if err != nil {
 		return nil, err
 	}
 
+	log.Printf("[INFO] Listing child resources")
 	result, err := ListChildResource(ctx, client, schemaTree, rl, opt.Parallelism)
 	if err != nil {
 		return nil, err
@@ -98,12 +103,15 @@ func List(ctx context.Context, subscriptionId, predicate string, opt *Option) (*
 		rl = []AzureResource{}
 		for _, res := range orl {
 			if v, ok := res.Properties["managedBy"]; ok && v != "" {
+				log.Printf("[INFO] Remove resource %s as it is managed by %s", res.Id.String(), v)
 				continue
 			}
 			rl = append(rl, res)
 		}
 		result.Resources = rl
 	}
+
+	log.Printf("[INFO] %d resources are listed", len(result.Resources))
 
 	return result, nil
 }
@@ -282,6 +290,7 @@ func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchema
 		for _, res := range rl {
 			res := res
 			wp.AddTask(func() (interface{}, error) {
+				log.Printf("[DEBUG] Listing direct child resource for %s", res.Id.String())
 				return listDirectChildResource(ctx, client, schemaTree, res), nil
 			})
 		}
@@ -290,7 +299,7 @@ func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchema
 			return nil, err
 		}
 
-		// Add newly child resources to the resource set, also put them into the working list for new iteration.
+		// Add new child resources to the resource set, also put them into the working list for new iteration.
 		rl = []AzureResource{}
 		for _, res := range nrl {
 			key := strings.ToUpper(res.Id.String())

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	azlog "github.com/Azure/azure-sdk-for-go/sdk/azcore/log"
+	"github.com/hashicorp/go-hclog"
 	"github.com/magodo/azlist/azlist"
 
 	"github.com/urfave/cli/v2"
@@ -18,6 +20,7 @@ func main() {
 		flagIncludeManaged bool
 		flagParallelism    int
 		flagPrintError     bool
+		flagVerbose        bool
 	)
 
 	app := &cli.App{
@@ -71,6 +74,12 @@ func main() {
 				Usage:       "Print errors received during listing resources",
 				Destination: &flagPrintError,
 			},
+			&cli.BoolFlag{
+				Name:        "verbose",
+				EnvVars:     []string{"AZLIST_VERBOSE"},
+				Usage:       "Print verbose output",
+				Destination: &flagVerbose,
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			if ctx.NArg() == 0 {
@@ -78,6 +87,21 @@ func main() {
 			}
 			if ctx.NArg() > 1 {
 				return fmt.Errorf("More than one where predicates specified")
+			}
+
+			if flagVerbose {
+				logger := hclog.New(&hclog.LoggerOptions{
+					Name:  "azlist",
+					Level: hclog.Debug,
+				}).StandardLogger(&hclog.StandardLoggerOptions{
+					InferLevels: true,
+				})
+				azlist.SetLogger(logger)
+
+				os.Setenv("AZURE_SDK_GO_LOGGING", "all")
+				azlog.SetListener(func(cls azlog.Event, msg string) {
+					logger.Printf("[DEBUG] %s: %s\n", cls, msg)
+				})
 			}
 
 			opt := &azlist.Option{
