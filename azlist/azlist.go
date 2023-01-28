@@ -11,8 +11,12 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 	"github.com/magodo/armid"
+	"github.com/magodo/azure-sdk-for-go-helper/authentication"
 	"github.com/magodo/workerpool"
 )
 
@@ -36,6 +40,21 @@ type ARMSchemaEntry struct {
 }
 
 type Option struct {
+	// Required
+	SubscriptionId string
+
+	// Optional
+
+	// Auth related
+	TenantID           string
+	ClientID           string
+	ClientSecret       string
+	ClientCertPath     string
+	ClientCertPassword string
+	// Env can be one of "public", "china", "usgovernment". Defaults to "public".
+	Env string
+
+	// Feature related
 	Parallelism    int
 	Recursive      bool
 	IncludeManaged bool
@@ -62,20 +81,61 @@ type ListResult struct {
 	Errors    []ListError
 }
 
-func List(ctx context.Context, subscriptionId, predicate string, opt *Option) (*ListResult, error) {
-	if opt == nil {
-		opt = defaultOption()
+func List(ctx context.Context, predicate string, opt Option) (*ListResult, error) {
+	if opt.SubscriptionId == "" {
+		return nil, fmt.Errorf("subscription id is empty")
+	}
+	if opt.Parallelism == 0 {
+		opt.Parallelism = runtime.NumCPU()
+	}
+	if opt.Env == "" {
+		opt.Env = "public"
 	}
 
-	log.Printf("[INFO] List for subscription %s via predicate %s, with option %#v", subscriptionId, predicate, opt)
+	log.Printf("[INFO] List for subscription %s via predicate %s (parallelism: %d | recursive %t | include managed %t)", opt.SubscriptionId, predicate, opt.Parallelism, opt.Recursive, opt.IncludeManaged)
 
-	client, err := NewClient(subscriptionId)
+	var cloudCfg cloud.Configuration
+	switch strings.ToLower(opt.Env) {
+	case "public":
+		cloudCfg = cloud.AzurePublic
+	case "usgovernment":
+		cloudCfg = cloud.AzureGovernment
+	case "china":
+		cloudCfg = cloud.AzureChina
+	default:
+		return nil, fmt.Errorf("unknown environment specified: %q", opt.Env)
+	}
+
+	clientOpt := arm.ClientOptions{
+		ClientOptions: policy.ClientOptions{
+			Cloud: cloudCfg,
+			Telemetry: policy.TelemetryOptions{
+				ApplicationID: "azlist",
+				Disabled:      false,
+			},
+			Logging: policy.LogOptions{
+				IncludeBody: true,
+			},
+		},
+	}
+
+	authOpt := authentication.Option{
+		ClientOptions:      clientOpt.ClientOptions,
+		TenantID:           opt.TenantID,
+		ClientID:           opt.ClientID,
+		ClientSecret:       opt.ClientSecret,
+		ClientCertPath:     opt.ClientCertPath,
+		ClientCertPassword: opt.ClientCertPassword,
+	}
+
+	log.Printf("[INFO] New Client")
+	client, err := NewClient(opt.SubscriptionId, authOpt, clientOpt)
 	if err != nil {
 		return nil, fmt.Errorf("new client: %v", err)
 	}
 
 	log.Printf("[INFO] Listing tracked resources")
-	rl, err := ListTrackedResources(ctx, client, subscriptionId, predicate)
+	rl, err := ListTrackedResources(ctx, client, opt.SubscriptionId, predicate)
 	if err != nil {
 		return nil, err
 	}

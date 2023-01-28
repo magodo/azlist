@@ -3,23 +3,24 @@ module github.com/magodo/azlist
 go 1.19
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.3
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.3.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph v0.6.0
 	github.com/hashicorp/go-hclog v1.3.1
 	github.com/magodo/armid v0.0.0-20220915030809-9ed860f93894
+	github.com/magodo/azure-sdk-for-go-helper v0.0.0-00010101000000-000000000000
 	github.com/magodo/workerpool v0.0.0-20211124060943-1c48f3e5a514
 	github.com/stretchr/testify v1.7.5
 	github.com/urfave/cli/v2 v2.16.3
 )
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
-	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.2.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.1.2 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v0.8.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
-	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
+	github.com/golang-jwt/jwt/v4 v4.4.2 // indirect
 	github.com/google/uuid v1.1.1 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -36,3 +37,5 @@ require (
 	golang.org/x/text v0.3.7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/magodo/azure-sdk-for-go-helper => ../azure-sdk-for-go-helper

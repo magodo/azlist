@@ -14,13 +14,19 @@ import (
 
 func main() {
 	var (
-		flagSubscriptionId string
-		flagRecursive      bool
-		flagWithBody       bool
-		flagIncludeManaged bool
-		flagParallelism    int
-		flagPrintError     bool
-		flagVerbose        bool
+		flagTenantId           string
+		flagClientId           string
+		flagClientSecret       string
+		flagClientCertPath     string
+		flagClientCertPassword string
+		flagEnvironment        string
+		flagSubscriptionId     string
+		flagRecursive          bool
+		flagWithBody           bool
+		flagIncludeManaged     bool
+		flagParallelism        int
+		flagPrintError         bool
+		flagVerbose            bool
 	)
 
 	app := &cli.App{
@@ -30,8 +36,44 @@ func main() {
 		UsageText: "azlist [option] <ARG where predicate>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name: "subscription-id",
-				// Honor the "ARM_SUBSCRIPTION_ID" as is used by the AzureRM provider, for easier use.
+				Name:        "client-id",
+				EnvVars:     []string{"AZLIST_CLIENT_ID", "ARM_CLIENT_ID"},
+				Usage:       "The client id",
+				Destination: &flagClientId,
+			},
+			&cli.StringFlag{
+				Name:        "client-secret",
+				EnvVars:     []string{"AZLIST_CLIENT_SECRET", "ARM_CLIENT_SECRET"},
+				Usage:       "The client secret",
+				Destination: &flagClientSecret,
+			},
+			&cli.StringFlag{
+				Name:        "client-certificate-path",
+				EnvVars:     []string{"AZLIST_CLIENT_CERTIFICATE_PATH", "ARM_CLIENT_CERTIFICATE_PATH"},
+				Usage:       "The client certificate path",
+				Destination: &flagClientCertPath,
+			},
+			&cli.StringFlag{
+				Name:        "client-certificate-password",
+				EnvVars:     []string{"AZLIST_CLIENT_CERTIFICATE_PASSWORD", "ARM_CLIENT_CERTIFICATE_PASSWORD"},
+				Usage:       "The client certificate password",
+				Destination: &flagClientCertPassword,
+			},
+			&cli.StringFlag{
+				Name:        "tenant-id",
+				EnvVars:     []string{"AZLIST_TENANT_ID", "ARM_TENANT_ID"},
+				Usage:       "The tenant id",
+				Destination: &flagTenantId,
+			},
+			&cli.StringFlag{
+				Name:        "env",
+				EnvVars:     []string{"AZLIST_ENV"},
+				Usage:       `The environment. Can be one of "public", "china", "usgovernment".`,
+				Destination: &flagEnvironment,
+				Value:       "public",
+			},
+			&cli.StringFlag{
+				Name:        "subscription-id",
 				EnvVars:     []string{"AZLIST_SUBSCRIPTION_ID", "ARM_SUBSCRIPTION_ID"},
 				Aliases:     []string{"s"},
 				Required:    true,
@@ -104,13 +146,20 @@ func main() {
 				})
 			}
 
-			opt := &azlist.Option{
-				Parallelism:    flagParallelism,
-				Recursive:      flagRecursive,
-				IncludeManaged: flagIncludeManaged,
+			opt := azlist.Option{
+				SubscriptionId:     flagSubscriptionId,
+				TenantID:           flagTenantId,
+				ClientID:           flagClientId,
+				ClientSecret:       flagClientSecret,
+				ClientCertPath:     flagClientCertPath,
+				ClientCertPassword: flagClientCertPassword,
+				Env:                flagEnvironment,
+				Parallelism:        flagParallelism,
+				Recursive:          flagRecursive,
+				IncludeManaged:     flagIncludeManaged,
 			}
 
-			result, err := azlist.List(ctx.Context, flagSubscriptionId, ctx.Args().First(), opt)
+			result, err := azlist.List(ctx.Context, ctx.Args().First(), opt)
 			if err != nil {
 				return err
 			}
