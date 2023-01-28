@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	azlog "github.com/Azure/azure-sdk-for-go/sdk/azcore/log"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/hashicorp/go-hclog"
 	"github.com/magodo/azlist/azlist"
 
@@ -14,19 +18,14 @@ import (
 
 func main() {
 	var (
-		flagTenantId           string
-		flagClientId           string
-		flagClientSecret       string
-		flagClientCertPath     string
-		flagClientCertPassword string
-		flagEnvironment        string
-		flagSubscriptionId     string
-		flagRecursive          bool
-		flagWithBody           bool
-		flagIncludeManaged     bool
-		flagParallelism        int
-		flagPrintError         bool
-		flagVerbose            bool
+		flagEnvironment    string
+		flagSubscriptionId string
+		flagRecursive      bool
+		flagWithBody       bool
+		flagIncludeManaged bool
+		flagParallelism    int
+		flagPrintError     bool
+		flagVerbose        bool
 	)
 
 	app := &cli.App{
@@ -35,36 +34,6 @@ func main() {
 		Usage:     "List Azure resources by an Azure Resource Graph `where` predicate",
 		UsageText: "azlist [option] <ARG where predicate>",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:        "client-id",
-				EnvVars:     []string{"AZLIST_CLIENT_ID", "ARM_CLIENT_ID"},
-				Usage:       "The client id",
-				Destination: &flagClientId,
-			},
-			&cli.StringFlag{
-				Name:        "client-secret",
-				EnvVars:     []string{"AZLIST_CLIENT_SECRET", "ARM_CLIENT_SECRET"},
-				Usage:       "The client secret",
-				Destination: &flagClientSecret,
-			},
-			&cli.StringFlag{
-				Name:        "client-certificate-path",
-				EnvVars:     []string{"AZLIST_CLIENT_CERTIFICATE_PATH", "ARM_CLIENT_CERTIFICATE_PATH"},
-				Usage:       "The client certificate path",
-				Destination: &flagClientCertPath,
-			},
-			&cli.StringFlag{
-				Name:        "client-certificate-password",
-				EnvVars:     []string{"AZLIST_CLIENT_CERTIFICATE_PASSWORD", "ARM_CLIENT_CERTIFICATE_PASSWORD"},
-				Usage:       "The client certificate password",
-				Destination: &flagClientCertPassword,
-			},
-			&cli.StringFlag{
-				Name:        "tenant-id",
-				EnvVars:     []string{"AZLIST_TENANT_ID", "ARM_TENANT_ID"},
-				Usage:       "The tenant id",
-				Destination: &flagTenantId,
-			},
 			&cli.StringFlag{
 				Name:        "env",
 				EnvVars:     []string{"AZLIST_ENV"},
@@ -146,17 +115,48 @@ func main() {
 				})
 			}
 
+			cloudCfg := cloud.AzurePublic
+			switch strings.ToLower(flagEnvironment) {
+			case "public":
+				cloudCfg = cloud.AzurePublic
+			case "usgovernment":
+				cloudCfg = cloud.AzureGovernment
+			case "china":
+				cloudCfg = cloud.AzureChina
+			default:
+				return fmt.Errorf("unknown environment specified: %q", flagEnvironment)
+			}
+
+			if v, ok := os.LookupEnv("ARM_TENANT_ID"); ok {
+				os.Setenv("AZURE_TENANT_ID", v)
+			}
+			if v, ok := os.LookupEnv("ARM_CLIENT_ID"); ok {
+				os.Setenv("AZURE_CLIENT_ID", v)
+			}
+			if v, ok := os.LookupEnv("ARM_CLIENT_SECRET"); ok {
+				os.Setenv("AZURE_CLIENT_SECRET", v)
+			}
+			if v, ok := os.LookupEnv("ARM_CLIENT_CERTIFICATE_PATH"); ok {
+				os.Setenv("AZURE_CLIENT_CERTIFICATE_PATH", v)
+			}
+
+			cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+				ClientOptions: policy.ClientOptions{
+					Cloud: cloudCfg,
+				},
+				TenantID: os.Getenv("ARM_TENANT_ID"),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to obtain a credential: %v", err)
+			}
+
 			opt := azlist.Option{
-				SubscriptionId:     flagSubscriptionId,
-				TenantID:           flagTenantId,
-				ClientID:           flagClientId,
-				ClientSecret:       flagClientSecret,
-				ClientCertPath:     flagClientCertPath,
-				ClientCertPassword: flagClientCertPassword,
-				Env:                flagEnvironment,
-				Parallelism:        flagParallelism,
-				Recursive:          flagRecursive,
-				IncludeManaged:     flagIncludeManaged,
+				SubscriptionId: flagSubscriptionId,
+				Cred:           cred,
+				Env:            flagEnvironment,
+				Parallelism:    flagParallelism,
+				Recursive:      flagRecursive,
+				IncludeManaged: flagIncludeManaged,
 			}
 
 			result, err := azlist.List(ctx.Context, ctx.Args().First(), opt)

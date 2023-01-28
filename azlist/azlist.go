@@ -16,7 +16,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 	"github.com/magodo/armid"
-	"github.com/magodo/azure-sdk-for-go-helper/authentication"
 	"github.com/magodo/workerpool"
 )
 
@@ -42,19 +41,10 @@ type ARMSchemaEntry struct {
 type Option struct {
 	// Required
 	SubscriptionId string
+	Cred           azcore.TokenCredential
 
 	// Optional
-
-	// Auth related
-	TenantID           string
-	ClientID           string
-	ClientSecret       string
-	ClientCertPath     string
-	ClientCertPassword string
-	// Env can be one of "public", "china", "usgovernment". Defaults to "public".
-	Env string
-
-	// Feature related
+	Env            string
 	Parallelism    int
 	Recursive      bool
 	IncludeManaged bool
@@ -82,6 +72,9 @@ type ListResult struct {
 }
 
 func List(ctx context.Context, predicate string, opt Option) (*ListResult, error) {
+	if opt.Cred == nil {
+		return nil, fmt.Errorf("token credential is empty")
+	}
 	if opt.SubscriptionId == "" {
 		return nil, fmt.Errorf("subscription id is empty")
 	}
@@ -119,17 +112,8 @@ func List(ctx context.Context, predicate string, opt Option) (*ListResult, error
 		},
 	}
 
-	authOpt := authentication.Option{
-		ClientOptions:      clientOpt.ClientOptions,
-		TenantID:           opt.TenantID,
-		ClientID:           opt.ClientID,
-		ClientSecret:       opt.ClientSecret,
-		ClientCertPath:     opt.ClientCertPath,
-		ClientCertPassword: opt.ClientCertPassword,
-	}
-
 	log.Printf("[INFO] New Client")
-	client, err := NewClient(opt.SubscriptionId, authOpt, clientOpt)
+	client, err := NewClient(opt.SubscriptionId, opt.Cred, clientOpt)
 	if err != nil {
 		return nil, fmt.Errorf("new client: %v", err)
 	}
