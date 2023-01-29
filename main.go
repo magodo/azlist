@@ -4,8 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	azlog "github.com/Azure/azure-sdk-for-go/sdk/azcore/log"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/hashicorp/go-hclog"
 	"github.com/magodo/azlist/azlist"
 
@@ -14,6 +19,7 @@ import (
 
 func main() {
 	var (
+		flagEnvironment    string
 		flagSubscriptionId string
 		flagRecursive      bool
 		flagWithBody       bool
@@ -30,8 +36,14 @@ func main() {
 		UsageText: "azlist [option] <ARG where predicate>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name: "subscription-id",
-				// Honor the "ARM_SUBSCRIPTION_ID" as is used by the AzureRM provider, for easier use.
+				Name:        "env",
+				EnvVars:     []string{"AZLIST_ENV"},
+				Usage:       `The environment. Can be one of "public", "china", "usgovernment".`,
+				Destination: &flagEnvironment,
+				Value:       "public",
+			},
+			&cli.StringFlag{
+				Name:        "subscription-id",
 				EnvVars:     []string{"AZLIST_SUBSCRIPTION_ID", "ARM_SUBSCRIPTION_ID"},
 				Aliases:     []string{"s"},
 				Required:    true,
@@ -104,13 +116,63 @@ func main() {
 				})
 			}
 
-			opt := &azlist.Option{
+			cloudCfg := cloud.AzurePublic
+			switch strings.ToLower(flagEnvironment) {
+			case "public":
+				cloudCfg = cloud.AzurePublic
+			case "usgovernment":
+				cloudCfg = cloud.AzureGovernment
+			case "china":
+				cloudCfg = cloud.AzureChina
+			default:
+				return fmt.Errorf("unknown environment specified: %q", flagEnvironment)
+			}
+
+			if v, ok := os.LookupEnv("ARM_TENANT_ID"); ok {
+				os.Setenv("AZURE_TENANT_ID", v)
+			}
+			if v, ok := os.LookupEnv("ARM_CLIENT_ID"); ok {
+				os.Setenv("AZURE_CLIENT_ID", v)
+			}
+			if v, ok := os.LookupEnv("ARM_CLIENT_SECRET"); ok {
+				os.Setenv("AZURE_CLIENT_SECRET", v)
+			}
+			if v, ok := os.LookupEnv("ARM_CLIENT_CERTIFICATE_PATH"); ok {
+				os.Setenv("AZURE_CLIENT_CERTIFICATE_PATH", v)
+			}
+
+			clientOpt := arm.ClientOptions{
+				ClientOptions: policy.ClientOptions{
+					Cloud: cloudCfg,
+					Telemetry: policy.TelemetryOptions{
+						ApplicationID: "azlist",
+						Disabled:      false,
+					},
+					Logging: policy.LogOptions{
+						IncludeBody: true,
+					},
+				},
+			}
+
+			cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+				ClientOptions: clientOpt.ClientOptions,
+				TenantID:      os.Getenv("ARM_TENANT_ID"),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to obtain a credential: %v", err)
+			}
+
+			opt := azlist.Option{
+				SubscriptionId: flagSubscriptionId,
+				Cred:           cred,
+				ClientOpt:      clientOpt,
+
 				Parallelism:    flagParallelism,
 				Recursive:      flagRecursive,
 				IncludeManaged: flagIncludeManaged,
 			}
 
-			result, err := azlist.List(ctx.Context, flagSubscriptionId, ctx.Args().First(), opt)
+			result, err := azlist.List(ctx.Context, ctx.Args().First(), opt)
 			if err != nil {
 				return err
 			}

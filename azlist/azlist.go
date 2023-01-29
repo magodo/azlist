@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 	"github.com/magodo/armid"
 	"github.com/magodo/workerpool"
@@ -36,6 +37,12 @@ type ARMSchemaEntry struct {
 }
 
 type Option struct {
+	// Required
+	SubscriptionId string
+	Cred           azcore.TokenCredential
+	ClientOpt      arm.ClientOptions
+
+	// Optional
 	Parallelism    int
 	Recursive      bool
 	IncludeManaged bool
@@ -62,20 +69,27 @@ type ListResult struct {
 	Errors    []ListError
 }
 
-func List(ctx context.Context, subscriptionId, predicate string, opt *Option) (*ListResult, error) {
-	if opt == nil {
-		opt = defaultOption()
+func List(ctx context.Context, predicate string, opt Option) (*ListResult, error) {
+	if opt.Cred == nil {
+		return nil, fmt.Errorf("token credential is empty")
+	}
+	if opt.SubscriptionId == "" {
+		return nil, fmt.Errorf("subscription id is empty")
+	}
+	if opt.Parallelism == 0 {
+		opt.Parallelism = runtime.NumCPU()
 	}
 
-	log.Printf("[INFO] List for subscription %s via predicate %s, with option %#v", subscriptionId, predicate, opt)
+	log.Printf("[INFO] List for subscription %s via predicate %s (parallelism: %d | recursive %t | include managed %t)", opt.SubscriptionId, predicate, opt.Parallelism, opt.Recursive, opt.IncludeManaged)
 
-	client, err := NewClient(subscriptionId)
+	log.Printf("[INFO] New Client")
+	client, err := NewClient(opt.SubscriptionId, opt.Cred, opt.ClientOpt)
 	if err != nil {
 		return nil, fmt.Errorf("new client: %v", err)
 	}
 
 	log.Printf("[INFO] Listing tracked resources")
-	rl, err := ListTrackedResources(ctx, client, subscriptionId, predicate)
+	rl, err := ListTrackedResources(ctx, client, opt.SubscriptionId, predicate)
 	if err != nil {
 		return nil, err
 	}
