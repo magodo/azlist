@@ -302,11 +302,8 @@ func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchema
 		})
 
 		for _, res := range rl {
-			res := res
-			wp.AddTask(func() (interface{}, error) {
-				log.Printf("[DEBUG] Listing direct child resource for %s", res.Id.String())
-				return listDirectChildResource(ctx, client, schemaTree, res), nil
-			})
+			log.Printf("[DEBUG] Listing direct child resource for %s", res.Id.String())
+			listDirectChildResource(ctx, client, schemaTree, wp, res)
 		}
 
 		if err := wp.Done(); err != nil {
@@ -350,74 +347,78 @@ func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchema
 }
 
 // listDirectChildResource list one resource's direct child resources based on the ARM schema resource type hierarchy.
-func listDirectChildResource(ctx context.Context, client *Client, schemaTree ARMSchemaTree, res AzureResource) ListResult {
+func listDirectChildResource(ctx context.Context, client *Client, schemaTree ARMSchemaTree, wp workerpool.WorkPool, res AzureResource) {
 	pid := res.Id
 	rt := strings.ToUpper(strings.TrimLeft(pid.RouteScopeString(), "/"))
 
-	result := ListResult{
-		Resources: []AzureResource{},
-		Errors:    []ListError{},
-	}
-
-	addListError := func(pid armid.ResourceId, childRt, apiVersion string, err error) {
-		result.Errors = append(result.Errors, ListError{
-			Endpoint: strings.ToUpper(pid.String() + "/" + childRt),
-			Version:  apiVersion,
-			Message:  err.Error(),
-		})
-	}
-
 	schemaEntry := schemaTree[rt]
 	if schemaEntry == nil {
-		return result
+		return
 	}
 
 	for crt, entry := range schemaEntry.Children {
-		version := entry.Versions[len(entry.Versions)-1]
-		pager := client.resource.NewListChildPager(pid.String(), crt, version)
-		for pager.More() {
-			page, err := pager.NextPage(ctx)
-			if err != nil {
-				if azerr, ok := err.(*azcore.ResponseError); ok && azerr.StatusCode == http.StatusNotFound {
-					// Intentionally ignore 404 on list.
-					break
-				}
-				// For other errors, record into the list result
-				addListError(pid, crt, version, err)
-				break
+		crt, entry := crt, entry
+		wp.AddTask(func() (interface{}, error) {
+			result := ListResult{
+				Resources: []AzureResource{},
+				Errors:    []ListError{},
 			}
-			for _, w := range page.Value {
-				b, err := json.Marshal(w)
-				if err != nil {
-					addListError(pid, crt, version, fmt.Errorf("marshalling %v: %v", w, err))
-					continue
-				}
-				var props map[string]interface{}
-				if err := json.Unmarshal(b, &props); err != nil {
-					addListError(pid, crt, version, fmt.Errorf("unmarshalling %v: %v", string(b), err))
-					continue
-				}
-				idraw, ok := props["id"]
-				if !ok {
-					addListError(pid, crt, version, fmt.Errorf("no resource id found in response: %s", string(b)))
-					continue
-				}
-				id, ok := idraw.(string)
-				if !ok {
-					addListError(pid, crt, version, fmt.Errorf("resource id is not a string: %s", string(b)))
-					continue
-				}
-				azureId, err := armid.ParseResourceId(id)
-				if err != nil {
-					addListError(pid, crt, version, fmt.Errorf("parsing resource id %v: %v", id, err))
-					continue
-				}
-				result.Resources = append(result.Resources, AzureResource{
-					Id:         azureId,
-					Properties: props,
+
+			addListError := func(pid armid.ResourceId, childRt, apiVersion string, err error) {
+				result.Errors = append(result.Errors, ListError{
+					Endpoint: strings.ToUpper(pid.String() + "/" + childRt),
+					Version:  apiVersion,
+					Message:  err.Error(),
 				})
 			}
-		}
+			version := entry.Versions[len(entry.Versions)-1]
+			log.Printf("[DEBUG] Listing resources under %s for resource type %s (api-version=%s)", pid, crt, version)
+			pager := client.resource.NewListChildPager(pid.String(), crt, version)
+			for pager.More() {
+				page, err := pager.NextPage(ctx)
+				if err != nil {
+					if azerr, ok := err.(*azcore.ResponseError); ok && azerr.StatusCode == http.StatusNotFound {
+						// Intentionally ignore 404 on list.
+						break
+					}
+					// For other errors, record into the list result
+					addListError(pid, crt, version, err)
+					break
+				}
+				for _, w := range page.Value {
+					b, err := json.Marshal(w)
+					if err != nil {
+						addListError(pid, crt, version, fmt.Errorf("marshalling %v: %v", w, err))
+						continue
+					}
+					var props map[string]interface{}
+					if err := json.Unmarshal(b, &props); err != nil {
+						addListError(pid, crt, version, fmt.Errorf("unmarshalling %v: %v", string(b), err))
+						continue
+					}
+					idraw, ok := props["id"]
+					if !ok {
+						addListError(pid, crt, version, fmt.Errorf("no resource id found in response: %s", string(b)))
+						continue
+					}
+					id, ok := idraw.(string)
+					if !ok {
+						addListError(pid, crt, version, fmt.Errorf("resource id is not a string: %s", string(b)))
+						continue
+					}
+					azureId, err := armid.ParseResourceId(id)
+					if err != nil {
+						addListError(pid, crt, version, fmt.Errorf("parsing resource id %v: %v", id, err))
+						continue
+					}
+					result.Resources = append(result.Resources, AzureResource{
+						Id:         azureId,
+						Properties: props,
+					})
+				}
+			}
+			return result, nil
+		})
 	}
-	return result
+	return
 }
