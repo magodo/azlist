@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	azlog "github.com/Azure/azure-sdk-for-go/sdk/azcore/log"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -140,11 +141,22 @@ func main() {
 				os.Setenv("AZURE_CLIENT_CERTIFICATE_PATH", v)
 			}
 
-			cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+			clientOpt := arm.ClientOptions{
 				ClientOptions: policy.ClientOptions{
 					Cloud: cloudCfg,
+					Telemetry: policy.TelemetryOptions{
+						ApplicationID: "azlist",
+						Disabled:      false,
+					},
+					Logging: policy.LogOptions{
+						IncludeBody: true,
+					},
 				},
-				TenantID: os.Getenv("ARM_TENANT_ID"),
+			}
+
+			cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+				ClientOptions: clientOpt.ClientOptions,
+				TenantID:      os.Getenv("ARM_TENANT_ID"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to obtain a credential: %v", err)
@@ -153,7 +165,8 @@ func main() {
 			opt := azlist.Option{
 				SubscriptionId: flagSubscriptionId,
 				Cred:           cred,
-				Env:            flagEnvironment,
+				ClientOpt:      clientOpt,
+
 				Parallelism:    flagParallelism,
 				Recursive:      flagRecursive,
 				IncludeManaged: flagIncludeManaged,

@@ -12,8 +12,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 	"github.com/magodo/armid"
 	"github.com/magodo/workerpool"
@@ -42,9 +40,9 @@ type Option struct {
 	// Required
 	SubscriptionId string
 	Cred           azcore.TokenCredential
+	ClientOpt      arm.ClientOptions
 
 	// Optional
-	Env            string
 	Parallelism    int
 	Recursive      bool
 	IncludeManaged bool
@@ -81,39 +79,11 @@ func List(ctx context.Context, predicate string, opt Option) (*ListResult, error
 	if opt.Parallelism == 0 {
 		opt.Parallelism = runtime.NumCPU()
 	}
-	if opt.Env == "" {
-		opt.Env = "public"
-	}
 
 	log.Printf("[INFO] List for subscription %s via predicate %s (parallelism: %d | recursive %t | include managed %t)", opt.SubscriptionId, predicate, opt.Parallelism, opt.Recursive, opt.IncludeManaged)
 
-	var cloudCfg cloud.Configuration
-	switch strings.ToLower(opt.Env) {
-	case "public":
-		cloudCfg = cloud.AzurePublic
-	case "usgovernment":
-		cloudCfg = cloud.AzureGovernment
-	case "china":
-		cloudCfg = cloud.AzureChina
-	default:
-		return nil, fmt.Errorf("unknown environment specified: %q", opt.Env)
-	}
-
-	clientOpt := arm.ClientOptions{
-		ClientOptions: policy.ClientOptions{
-			Cloud: cloudCfg,
-			Telemetry: policy.TelemetryOptions{
-				ApplicationID: "azlist",
-				Disabled:      false,
-			},
-			Logging: policy.LogOptions{
-				IncludeBody: true,
-			},
-		},
-	}
-
 	log.Printf("[INFO] New Client")
-	client, err := NewClient(opt.SubscriptionId, opt.Cred, clientOpt)
+	client, err := NewClient(opt.SubscriptionId, opt.Cred, opt.ClientOpt)
 	if err != nil {
 		return nil, fmt.Errorf("new client: %v", err)
 	}
