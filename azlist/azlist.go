@@ -237,6 +237,17 @@ func BuildARMSchemaTree(armSchemaFile []byte) (ARMSchemaTree, error) {
 		}
 	}
 
+	var deleteRts []string
+	// Remove resource types that has trailing slash, e.g. "Microsoft.Network/publicIPAddresses/"
+	for rt := range armSchemas {
+		if strings.HasSuffix(rt, "/") {
+			deleteRts = append(deleteRts, rt)
+		}
+	}
+	for _, rt := range deleteRts {
+		delete(armSchemas, rt)
+	}
+
 	remains := len(armSchemas)
 
 	for remains > 0 {
