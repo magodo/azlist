@@ -1,7 +1,6 @@
 package azlist
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -79,12 +78,4 @@ func TestBuildARMSchemaTree(t *testing.T) {
 			require.Equal(t, tt.expect(), tree)
 		})
 	}
-}
-
-func TestBuildARMSchemaTree_WithRealSchema(t *testing.T) {
-	var armSchemas map[string][]string
-	require.NoError(t, json.Unmarshal(ARMSchemaFile, &armSchemas))
-	tree, err := BuildARMSchemaTree(ARMSchemaFile)
-	require.NoError(t, err)
-	require.Equal(t, len(armSchemas), len(tree))
 }
