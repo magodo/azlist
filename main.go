@@ -74,7 +74,7 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name:        "include-resource-group",
-				EnvVars:     []string{"AZLIST_INCLUDE_RESOURCE_GRROUP"},
+				EnvVars:     []string{"AZLIST_INCLUDE_RESOURCE_GROUP"},
 				Usage:       "Include the resource groups that the listed resources belong to",
 				Destination: &flagIncludeResourceGroup,
 			},
