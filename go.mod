@@ -6,6 +6,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.3.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph v0.6.0
+	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.1.1
 	github.com/hashicorp/go-hclog v1.3.1
 	github.com/magodo/armid v0.0.0-20220915030809-9ed860f93894
 	github.com/magodo/workerpool v0.0.0-20211124060943-1c48f3e5a514

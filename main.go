@@ -8,7 +8,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
-	azlog "github.com/Azure/azure-sdk-for-go/sdk/azcore/log"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/hashicorp/go-hclog"
@@ -19,14 +18,16 @@ import (
 
 func main() {
 	var (
-		flagEnvironment    string
-		flagSubscriptionId string
-		flagRecursive      bool
-		flagWithBody       bool
-		flagIncludeManaged bool
-		flagParallelism    int
-		flagPrintError     bool
-		flagVerbose        bool
+		flagEnvironment          string
+		flagSubscriptionId       string
+		flagRecursive            bool
+		flagWithBody             bool
+		flagIncludeManaged       bool
+		flagIncludeResourceGroup bool
+		flagParallelism          int
+		flagExtensions           cli.StringSlice
+		flagPrintError           bool
+		flagVerbose              bool
 	)
 
 	app := &cli.App{
@@ -71,6 +72,12 @@ func main() {
 				Usage:       "Include resource whose lifecycle is managed by others",
 				Destination: &flagIncludeManaged,
 			},
+			&cli.BoolFlag{
+				Name:        "include-resource-group",
+				EnvVars:     []string{"AZLIST_INCLUDE_RESOURCE_GRROUP"},
+				Usage:       "Include the resource groups that the listed resources belong to",
+				Destination: &flagIncludeResourceGroup,
+			},
 			&cli.IntFlag{
 				Name:        "parallelism",
 				EnvVars:     []string{"AZLIST_PARALLELISM"},
@@ -78,6 +85,13 @@ func main() {
 				Usage:       "Limit the number of parallel operations to list resources",
 				Value:       10,
 				Destination: &flagParallelism,
+			},
+			&cli.StringSliceFlag{
+				Name:    "extension",
+				EnvVars: []string{"AZLIST_EXTENSION"},
+				Usage: `Specify a list of extension resource types (e.g. "Microsoft.Authorization/roleAssignments"). Some extension resource types have special filtering, which includes:
+	- Microsoft.Authorization/roleAssignments: Only role assignments whose "scope" is the same as the current resource is listed`,
+				Destination: &flagExtensions,
 			},
 			&cli.BoolFlag{
 				Name:        "print-error",
@@ -109,11 +123,6 @@ func main() {
 					InferLevels: true,
 				})
 				azlist.SetLogger(logger)
-
-				os.Setenv("AZURE_SDK_GO_LOGGING", "all")
-				azlog.SetListener(func(cls azlog.Event, msg string) {
-					logger.Printf("[DEBUG] %s: %s\n", cls, msg)
-				})
 			}
 
 			cloudCfg := cloud.AzurePublic
@@ -162,14 +171,43 @@ func main() {
 				return fmt.Errorf("failed to obtain a credential: %v", err)
 			}
 
+			var extensions []azlist.ExtensionResource
+			for _, rt := range flagExtensions.Value() {
+				extension := azlist.ExtensionResource{Type: rt}
+				if strings.EqualFold(rt, "Microsoft.Authorization/roleAssignments") {
+					extension.Filter = func(res, extensionRes map[string]interface{}) bool {
+						idRaw, ok := res["id"]
+						if !ok {
+							return false
+						}
+						id := idRaw.(string)
+
+						propsRaw, ok := extensionRes["properties"]
+						if !ok {
+							return false
+						}
+						scopeRaw, ok := propsRaw.(map[string]interface{})["scope"]
+						if !ok {
+							return false
+						}
+						scope := scopeRaw.(string)
+
+						return strings.EqualFold(id, scope)
+					}
+				}
+				extensions = append(extensions, extension)
+			}
+
 			opt := azlist.Option{
 				SubscriptionId: flagSubscriptionId,
 				Cred:           cred,
 				ClientOpt:      clientOpt,
 
-				Parallelism:    flagParallelism,
-				Recursive:      flagRecursive,
-				IncludeManaged: flagIncludeManaged,
+				Parallelism:            flagParallelism,
+				Recursive:              flagRecursive,
+				IncludeManaged:         flagIncludeManaged,
+				IncludeResourceGroup:   flagIncludeResourceGroup,
+				ExtensionResourceTypes: extensions,
 			}
 
 			result, err := azlist.List(ctx.Context, ctx.Args().First(), opt)
