@@ -3,15 +3,15 @@ package azlist
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 	sdkARMResources "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
+	"github.com/magodo/azlist/arg"
 	"github.com/magodo/azlist/armresources"
 )
 
 type Client struct {
 	resourceGroup *sdkARMResources.ResourceGroupsClient
 	resource      *armresources.Client
-	resourceGraph *armresourcegraph.Client
+	resourceGraph *arg.Client
 }
 
 func NewClient(subscriptionId string, cred azcore.TokenCredential, clientOpt arm.ClientOptions) (*Client, error) {
@@ -25,7 +25,7 @@ func NewClient(subscriptionId string, cred azcore.TokenCredential, clientOpt arm
 		return nil, err
 	}
 
-	argClient, err := armresourcegraph.NewClient(cred, &clientOpt)
+	argClient, err := arg.NewClient(cred, &clientOpt)
 	if err != nil {
 		return nil, err
 	}

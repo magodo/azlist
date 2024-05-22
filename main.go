@@ -160,6 +160,7 @@ func main() {
 					Logging: policy.LogOptions{
 						IncludeBody: true,
 					},
+					PerCallPolicies: []policy.Policy{},
 				},
 			}
 
