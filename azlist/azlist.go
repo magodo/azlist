@@ -196,9 +196,8 @@ func ListTrackedResources(ctx context.Context, client *Client, subscriptionId st
 	queryReq := armresourcegraph.QueryRequest{
 		Query: &query,
 		Options: &armresourcegraph.QueryRequestOptions{
-			AuthorizationScopeFilter: ptr(armresourcegraph.AuthorizationScopeFilterAtScopeAndBelow),
-			ResultFormat:             ptr(armresourcegraph.ResultFormatObjectArray),
-			Top:                      ptr(top),
+			ResultFormat: ptr(armresourcegraph.ResultFormatObjectArray),
+			Top:          ptr(top),
 		},
 		Subscriptions: []*string{&subscriptionId},
 	}
