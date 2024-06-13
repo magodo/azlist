@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/hashicorp/go-hclog"
 	"github.com/magodo/azlist/azlist"
 
 	"github.com/urfave/cli/v2"
@@ -116,12 +116,7 @@ func main() {
 			}
 
 			if flagVerbose {
-				logger := hclog.New(&hclog.LoggerOptions{
-					Name:  "azlist",
-					Level: hclog.Debug,
-				}).StandardLogger(&hclog.StandardLoggerOptions{
-					InferLevels: true,
-				})
+				logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 				azlist.SetLogger(logger)
 			}
 

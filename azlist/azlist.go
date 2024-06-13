@@ -87,21 +87,21 @@ func List(ctx context.Context, predicate string, opt Option) (*ListResult, error
 		opt.Parallelism = runtime.NumCPU()
 	}
 
-	log.Printf("[INFO] List for subscription %s via predicate %s (parallelism: %d | recursive %t | include managed %t)", opt.SubscriptionId, predicate, opt.Parallelism, opt.Recursive, opt.IncludeManaged)
+	log.Info("List begins", "subscription", opt.SubscriptionId, "predicate", predicate, "parallelism", opt.Parallelism, "recursive", opt.Recursive, "include managed resources", opt.IncludeManaged)
 
-	log.Printf("[INFO] New Client")
+	log.Info("New Client")
 	client, err := NewClient(opt.SubscriptionId, opt.Cred, opt.ClientOpt)
 	if err != nil {
 		return nil, fmt.Errorf("new client: %v", err)
 	}
 
-	log.Printf("[INFO] Listing tracked resources")
+	log.Info("Listing tracked resources")
 	rl, err := ListTrackedResources(ctx, client, opt.SubscriptionId, predicate)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("[INFO] Build ARM schema tree")
+	log.Info("Build ARM schema tree")
 	schemaTree, err := BuildARMSchemaTree(ARMSchemaFile)
 	if err != nil {
 		return nil, err
@@ -109,7 +109,7 @@ func List(ctx context.Context, predicate string, opt Option) (*ListResult, error
 
 	var el []ListError
 	if opt.Recursive {
-		log.Printf("[INFO] Listing child resources")
+		log.Info("Listing child resources")
 		rl, el, err = ListChildResource(ctx, client, schemaTree, rl, opt.Parallelism)
 		if err != nil {
 			return nil, err
@@ -121,7 +121,7 @@ func List(ctx context.Context, predicate string, opt Option) (*ListResult, error
 		rl = []AzureResource{}
 		for _, res := range orl {
 			if v, ok := res.Properties["managedBy"]; ok && v != "" {
-				log.Printf("[INFO] Remove resource %s as it is managed by %s", res.Id.String(), v)
+				log.Info("Removing managed resource", "id", res.Id.String(), "managed by", v)
 				continue
 			}
 			rl = append(rl, res)
@@ -172,7 +172,7 @@ func List(ctx context.Context, predicate string, opt Option) (*ListResult, error
 	}
 
 	if len(opt.ExtensionResourceTypes) != 0 {
-		log.Printf("[INFO] Listing extension resources")
+		log.Info("Listing extension resources")
 		var extEl []ListError
 		rl, extEl, err = ListExtensionResource(ctx, client, schemaTree, rl, opt.ExtensionResourceTypes, opt.Parallelism)
 		if err != nil {
@@ -181,7 +181,7 @@ func List(ctx context.Context, predicate string, opt Option) (*ListResult, error
 		el = append(el, extEl...)
 	}
 
-	log.Printf("[INFO] %d resources are listed", len(rl))
+	log.Info("List ends", "list count", len(rl))
 
 	return &ListResult{
 		Resources: rl,
@@ -379,7 +379,7 @@ func ListChildResource(ctx context.Context, client *Client, schemaTree ARMSchema
 		})
 
 		for _, res := range rl {
-			log.Printf("[DEBUG] Listing direct child resource for %s", res.Id.String())
+			log.Debug("Listing direct child resource", "parent", res.Id.String())
 			listDirectChildResource(ctx, client, schemaTree, wp, res)
 		}
 
@@ -454,7 +454,7 @@ func ListExtensionResource(ctx context.Context, client *Client, schemaTree ARMSc
 	})
 
 	for _, res := range rl {
-		log.Printf("[DEBUG] Listing extension resource for %s", res.Id.String())
+		log.Debug("Listing extension resource", "parent", res.Id.String())
 		listExtensionResource(ctx, client, schemaTree, rtl, wp, res)
 	}
 
@@ -543,7 +543,7 @@ func listResource(ctx context.Context, client *Client, res AzureResource, crt, v
 			Message:  err.Error(),
 		})
 	}
-	log.Printf("[DEBUG] Listing resources under %s for resource type %s (api-version=%s)", pid, crt, version)
+	log.Debug("Listing child resources by resource type", "parent", pid, "child resource type", crt, "api version", version)
 	pager := client.resource.NewListChildPager(pid, crt, version)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
