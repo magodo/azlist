@@ -27,7 +27,7 @@ func main() {
 		flagParallelism          int
 		flagExtensions           cli.StringSlice
 		flagPrintError           bool
-		flagVerbose              bool
+		flagLogLevel             string
 	)
 
 	app := &cli.App{
@@ -100,11 +100,12 @@ func main() {
 				Usage:       "Print errors received during listing resources",
 				Destination: &flagPrintError,
 			},
-			&cli.BoolFlag{
-				Name:        "verbose",
-				EnvVars:     []string{"AZLIST_VERBOSE"},
-				Usage:       "Print verbose output",
-				Destination: &flagVerbose,
+			&cli.StringFlag{
+				Name:        "log-level",
+				Aliases:     []string{"L"},
+				EnvVars:     []string{"AZLIST_LOG_LEVEL"},
+				Usage:       `Log level. Possible values are "error", "warn", "info", "debug".`,
+				Destination: &flagLogLevel,
 			},
 		},
 		Action: func(ctx *cli.Context) error {
@@ -115,9 +116,20 @@ func main() {
 				return fmt.Errorf("More than one where predicates specified")
 			}
 
-			if flagVerbose {
-				logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
-				azlist.SetLogger(logger)
+			var logger *slog.Logger
+			if flagLogLevel != "" {
+				var level slog.Level
+				switch strings.ToLower(flagLogLevel) {
+				case "error":
+					level = slog.LevelError
+				case "warn":
+					level = slog.LevelWarn
+				case "info":
+					level = slog.LevelInfo
+				case "debug":
+					level = slog.LevelDebug
+				}
+				logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 			}
 
 			cloudCfg := cloud.AzurePublic
@@ -198,6 +210,7 @@ func main() {
 				Cred:           cred,
 				ClientOpt:      clientOpt,
 
+				Logger:                 logger,
 				Parallelism:            flagParallelism,
 				Recursive:              flagRecursive,
 				IncludeManaged:         flagIncludeManaged,
@@ -205,7 +218,12 @@ func main() {
 				ExtensionResourceTypes: extensions,
 			}
 
-			result, err := azlist.List(ctx.Context, ctx.Args().First(), opt)
+			l, err := azlist.NewLister(opt)
+			if err != nil {
+				return err
+			}
+
+			result, err := l.List(ctx.Context, ctx.Args().First())
 			if err != nil {
 				return err
 			}
