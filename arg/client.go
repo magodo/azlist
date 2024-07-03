@@ -11,6 +11,7 @@ package arg
 import (
 	"context"
 	"net/http"
+	"os"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
@@ -20,6 +21,14 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 )
+
+var apiVersion = "2022-10-01"
+
+func init() {
+	if v, ok := os.LookupEnv("AZLIST_ARG_API_VERSION"); ok {
+		apiVersion = v
+	}
+}
 
 const (
 	moduleName    = "armresourcegraph"
@@ -83,7 +92,7 @@ func (client *Client) resourcesCreateRequest(ctx context.Context, query armresou
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2021-04-01-alpha")
+	reqQP.Set("api-version", apiVersion)
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, runtime.MarshalAsJSON(req, query)
@@ -94,49 +103,6 @@ func (client *Client) resourcesHandleResponse(resp *http.Response) (armresourceg
 	result := armresourcegraph.ClientResourcesResponse{}
 	if err := runtime.UnmarshalAsJSON(resp, &result.QueryResponse); err != nil {
 		return armresourcegraph.ClientResourcesResponse{}, err
-	}
-	return result, nil
-}
-
-// ResourcesHistory - List all snapshots of a resource for a given time interval.
-// If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2021-06-01-preview
-// request - Request specifying the query and its options.
-// options - ClientResourcesHistoryOptions contains the optional parameters for the Client.ResourcesHistory method.
-func (client *Client) ResourcesHistory(ctx context.Context, request armresourcegraph.ResourcesHistoryRequest, options *armresourcegraph.ClientResourcesHistoryOptions) (armresourcegraph.ClientResourcesHistoryResponse, error) {
-	req, err := client.resourcesHistoryCreateRequest(ctx, request, options)
-	if err != nil {
-		return armresourcegraph.ClientResourcesHistoryResponse{}, err
-	}
-	resp, err := client.pl.Do(req)
-	if err != nil {
-		return armresourcegraph.ClientResourcesHistoryResponse{}, err
-	}
-	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return armresourcegraph.ClientResourcesHistoryResponse{}, runtime.NewResponseError(resp)
-	}
-	return client.resourcesHistoryHandleResponse(resp)
-}
-
-// resourcesHistoryCreateRequest creates the ResourcesHistory request.
-func (client *Client) resourcesHistoryCreateRequest(ctx context.Context, request armresourcegraph.ResourcesHistoryRequest, options *armresourcegraph.ClientResourcesHistoryOptions) (*policy.Request, error) {
-	urlPath := "/providers/Microsoft.ResourceGraph/resourcesHistory"
-	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.host, urlPath))
-	if err != nil {
-		return nil, err
-	}
-	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2021-04-01-alpha")
-	req.Raw().URL.RawQuery = reqQP.Encode()
-	req.Raw().Header["Accept"] = []string{"application/json"}
-	return req, runtime.MarshalAsJSON(req, request)
-}
-
-// resourcesHistoryHandleResponse handles the ResourcesHistory response.
-func (client *Client) resourcesHistoryHandleResponse(resp *http.Response) (armresourcegraph.ClientResourcesHistoryResponse, error) {
-	result := armresourcegraph.ClientResourcesHistoryResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.Interface); err != nil {
-		return armresourcegraph.ClientResourcesHistoryResponse{}, err
 	}
 	return result, nil
 }
