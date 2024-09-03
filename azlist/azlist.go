@@ -164,7 +164,7 @@ func (l *Lister) List(ctx context.Context, predicate string) (*ListResult, error
 					// Get the properties of the rg
 					resp, err := l.Client.resourceGroup.Get(ctx, rg.Name, nil)
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("getting resource group: %w", err)
 					}
 					if resp.ID == nil {
 						return nil, fmt.Errorf("unexpected nil ID of rg %s", rg.Name)
@@ -231,7 +231,7 @@ func (l *Lister) ListTrackedResources(ctx context.Context, predicate string) ([]
 
 	resp, err := l.Client.resourceGraph.Resources(ctx, queryReq, nil)
 	if err != nil {
-		return nil, fmt.Errorf("executing ARG query %q: %v", query, err)
+		return nil, fmt.Errorf("executing ARG query %q: %w", query, err)
 	}
 
 	var rl []AzureResource
@@ -280,7 +280,7 @@ func (l *Lister) ListTrackedResources(ctx context.Context, predicate string) ([]
 
 		resp, err := l.Client.resourceGraph.Resources(ctx, queryReq, nil)
 		if err != nil {
-			return nil, fmt.Errorf("running ARG query %q with skipToken %q: %v", query, skipToken, err)
+			return nil, fmt.Errorf("running ARG query %q with skipToken %q: %w", query, skipToken, err)
 		}
 
 		if err := collectResource(resp.QueryResponse); err != nil {
