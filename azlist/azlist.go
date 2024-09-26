@@ -50,12 +50,14 @@ type Option struct {
 	ClientOpt      arm.ClientOptions
 
 	// Optional
-	Logger                 *slog.Logger
-	Parallelism            int
-	Recursive              bool
-	IncludeManaged         bool
-	IncludeResourceGroup   bool
-	ExtensionResourceTypes []ExtensionResource
+	Logger                      *slog.Logger
+	Parallelism                 int
+	Recursive                   bool
+	IncludeManaged              bool
+	IncludeResourceGroup        bool
+	ExtensionResourceTypes      []ExtensionResource
+	ARGTable                    string
+	ARGAuthorizationScopeFilter armresourcegraph.AuthorizationScopeFilter
 }
 
 type ListError struct {
@@ -76,14 +78,16 @@ type ListResult struct {
 type Lister struct {
 	*slog.Logger
 
-	SubscriptionId         string
-	Client                 *Client
-	Parallelism            int
-	Recursive              bool
-	IncludeManaged         bool
-	IncludeResourceGroup   bool
-	ExtensionResourceTypes []ExtensionResource
-	ARMSchemaTree          ARMSchemaTree
+	SubscriptionId              string
+	Client                      *Client
+	Parallelism                 int
+	Recursive                   bool
+	IncludeManaged              bool
+	IncludeResourceGroup        bool
+	ExtensionResourceTypes      []ExtensionResource
+	ARMSchemaTree               ARMSchemaTree
+	ARGTable                    string
+	ARGAuthorizationScopeFilter *armresourcegraph.AuthorizationScopeFilter
 }
 
 func NewLister(opt Option) (*Lister, error) {
@@ -112,16 +116,28 @@ func NewLister(opt Option) (*Lister, error) {
 		return nil, err
 	}
 
+	argTable := "Resources"
+	if opt.ARGTable != "" {
+		argTable = opt.ARGTable
+	}
+
+	var argAuthorizationScopeFilter *armresourcegraph.AuthorizationScopeFilter
+	if opt.ARGAuthorizationScopeFilter != "" {
+		argAuthorizationScopeFilter = &opt.ARGAuthorizationScopeFilter
+	}
+
 	return &Lister{
-		Logger:                 logger,
-		SubscriptionId:         opt.SubscriptionId,
-		Client:                 client,
-		Parallelism:            opt.Parallelism,
-		Recursive:              opt.Recursive,
-		IncludeManaged:         opt.IncludeManaged,
-		IncludeResourceGroup:   opt.IncludeResourceGroup,
-		ExtensionResourceTypes: opt.ExtensionResourceTypes,
-		ARMSchemaTree:          schemaTree,
+		Logger:                      logger,
+		SubscriptionId:              opt.SubscriptionId,
+		Client:                      client,
+		Parallelism:                 opt.Parallelism,
+		Recursive:                   opt.Recursive,
+		IncludeManaged:              opt.IncludeManaged,
+		IncludeResourceGroup:        opt.IncludeResourceGroup,
+		ExtensionResourceTypes:      opt.ExtensionResourceTypes,
+		ARGTable:                    argTable,
+		ARGAuthorizationScopeFilter: argAuthorizationScopeFilter,
+		ARMSchemaTree:               schemaTree,
 	}, nil
 }
 
@@ -219,12 +235,13 @@ func (l *Lister) List(ctx context.Context, predicate string) (*ListResult, error
 func (l *Lister) ListTrackedResources(ctx context.Context, predicate string) ([]AzureResource, error) {
 	const top int32 = 1000
 
-	query := fmt.Sprintf("Resources | where %s | order by id desc", predicate)
+	query := fmt.Sprintf("%s | where %s | order by id desc", l.ARGTable, predicate)
 	queryReq := armresourcegraph.QueryRequest{
 		Query: &query,
 		Options: &armresourcegraph.QueryRequestOptions{
-			ResultFormat: ptr(armresourcegraph.ResultFormatObjectArray),
-			Top:          ptr(top),
+			ResultFormat:             ptr(armresourcegraph.ResultFormatObjectArray),
+			Top:                      ptr(top),
+			AuthorizationScopeFilter: l.ARGAuthorizationScopeFilter,
 		},
 		Subscriptions: []*string{&l.SubscriptionId},
 	}

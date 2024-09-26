@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph"
 	"github.com/magodo/azlist/azlist"
 
 	"github.com/urfave/cli/v2"
@@ -18,16 +19,18 @@ import (
 
 func main() {
 	var (
-		flagEnvironment          string
-		flagSubscriptionId       string
-		flagRecursive            bool
-		flagWithBody             bool
-		flagIncludeManaged       bool
-		flagIncludeResourceGroup bool
-		flagParallelism          int
-		flagExtensions           cli.StringSlice
-		flagPrintError           bool
-		flagLogLevel             string
+		flagEnvironment                 string
+		flagSubscriptionId              string
+		flagRecursive                   bool
+		flagWithBody                    bool
+		flagIncludeManaged              bool
+		flagIncludeResourceGroup        bool
+		flagParallelism                 int
+		flagExtensions                  cli.StringSlice
+		flagARGTable                    string
+		flagARGAuthorizationScopeFilter string
+		flagPrintError                  bool
+		flagLogLevel                    string
 	)
 
 	app := &cli.App{
@@ -90,8 +93,22 @@ func main() {
 				Name:    "extension",
 				EnvVars: []string{"AZLIST_EXTENSION"},
 				Usage: `Specify a list of extension resource types (e.g. "Microsoft.Authorization/roleAssignments"). Some extension resource types have special filtering, which includes:
-	- Microsoft.Authorization/roleAssignments: Only role assignments whose "scope" is the same as the current resource is listed`,
+	- Microsoft.Authorization/roleAssignments: Only role assignments whose "scope" is the same as the current resource is listed
+`,
 				Destination: &flagExtensions,
+			},
+			&cli.StringFlag{
+				Name:        "table",
+				Aliases:     []string{"t"},
+				EnvVars:     []string{"AZLIST_TABLE"},
+				Usage:       `The Azure Resource Graph table name. Defaults to "Resources".`,
+				Destination: &flagARGTable,
+			},
+			&cli.StringFlag{
+				Name:        "authorization-scope-filter",
+				EnvVars:     []string{"AZLIST_AUTHORIZATION_SCOPE_FILTER"},
+				Usage:       `The Azure Resource Graph Authorization Scope Filter parameter. Possible values are: "AtScopeAndBelow", "AtScopeAndAbove", "AtScopeAboveAndBelow" and "AtScopeExact"`,
+				Destination: &flagARGAuthorizationScopeFilter,
 			},
 			&cli.BoolFlag{
 				Name:        "print-error",
@@ -210,12 +227,14 @@ func main() {
 				Cred:           cred,
 				ClientOpt:      clientOpt,
 
-				Logger:                 logger,
-				Parallelism:            flagParallelism,
-				Recursive:              flagRecursive,
-				IncludeManaged:         flagIncludeManaged,
-				IncludeResourceGroup:   flagIncludeResourceGroup,
-				ExtensionResourceTypes: extensions,
+				Logger:                      logger,
+				Parallelism:                 flagParallelism,
+				Recursive:                   flagRecursive,
+				IncludeManaged:              flagIncludeManaged,
+				IncludeResourceGroup:        flagIncludeResourceGroup,
+				ExtensionResourceTypes:      extensions,
+				ARGTable:                    flagARGTable,
+				ARGAuthorizationScopeFilter: armresourcegraph.AuthorizationScopeFilter(flagARGAuthorizationScopeFilter),
 			}
 
 			l, err := azlist.NewLister(opt)
