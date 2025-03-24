@@ -7,7 +7,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.3.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resourcegraph/armresourcegraph v0.6.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources v1.1.1
-	github.com/hashicorp/go-hclog v1.3.1
 	github.com/magodo/armid v0.0.0-20220915030809-9ed860f93894
 	github.com/magodo/workerpool v0.0.0-20211124060943-1c48f3e5a514
 	github.com/stretchr/testify v1.7.5
@@ -19,14 +18,11 @@ require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.0.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fatih/color v1.13.0 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/mattn/go-colorable v0.1.12 // indirect
-	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
