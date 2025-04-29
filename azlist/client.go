@@ -3,7 +3,7 @@ package azlist
 import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	sdkARMResources "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
+	sdkARMResources "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources/v2"
 	"github.com/magodo/azlist/arg"
 	"github.com/magodo/azlist/armresources"
 )
