@@ -9,8 +9,9 @@ import (
 )
 
 type Client struct {
+	resource      *sdkARMResources.Client
 	resourceGroup *sdkARMResources.ResourceGroupsClient
-	resource      *armresources.Client
+	listresource  *armresources.Client
 	resourceGraph *arg.Client
 }
 
@@ -20,7 +21,12 @@ func NewClient(subscriptionId string, cred azcore.TokenCredential, clientOpt arm
 		return nil, err
 	}
 
-	resClient, err := armresources.NewClient(subscriptionId, cred, &clientOpt)
+	resClient, err := sdkARMResources.NewClient(subscriptionId, cred, &clientOpt)
+	if err != nil {
+		return nil, err
+	}
+
+	listClient, err := armresources.NewClient(subscriptionId, cred, &clientOpt)
 	if err != nil {
 		return nil, err
 	}
@@ -33,6 +39,7 @@ func NewClient(subscriptionId string, cred azcore.TokenCredential, clientOpt arm
 	return &Client{
 		resourceGroup: rgClient,
 		resource:      resClient,
+		listresource:  listClient,
 		resourceGraph: argClient,
 	}, nil
 }

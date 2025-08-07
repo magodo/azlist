@@ -141,15 +141,30 @@ func NewLister(opt Option) (*Lister, error) {
 	}, nil
 }
 
-func (l *Lister) List(ctx context.Context, predicate string) (*ListResult, error) {
-	l.Info("List begins", "subscription", l.SubscriptionId, "predicate", predicate, "parallelism", l.Parallelism, "recursive", l.Recursive, "include managed resources", l.IncludeManaged)
+func (l *Lister) ListByIds(ctx context.Context, resourceIds []string) (*ListResult, error) {
+	l.Info("List by id begins", "subscription", l.SubscriptionId, "ids", resourceIds, "parallelism", l.Parallelism, "recursive", l.Recursive, "include managed resources", l.IncludeManaged)
 
-	l.Debug("Listing tracked resources")
-	rl, err := l.ListTrackedResources(ctx, predicate)
+	l.Debug("Listing resources by id")
+	rl, err := l.ListResourcesByIds(ctx, resourceIds)
 	if err != nil {
 		return nil, err
 	}
+	return l.ListRemaining(ctx, rl)
+}
 
+func (l *Lister) ListByQuery(ctx context.Context, predicate string) (*ListResult, error) {
+	l.Info("List by query begins", "subscription", l.SubscriptionId, "predicate", predicate, "parallelism", l.Parallelism, "recursive", l.Recursive, "include managed resources", l.IncludeManaged)
+
+	l.Debug("Listing resources by query")
+	rl, err := l.ListResourcesByQuery(ctx, predicate)
+	if err != nil {
+		return nil, err
+	}
+	return l.ListRemaining(ctx, rl)
+}
+
+func (l *Lister) ListRemaining(ctx context.Context, rl []AzureResource) (*ListResult, error) {
+	var err error
 	var el []ListError
 	if l.Recursive {
 		l.Debug("Listing child resources")
@@ -232,7 +247,54 @@ func (l *Lister) List(ctx context.Context, predicate string) (*ListResult, error
 	}, nil
 }
 
-func (l *Lister) ListTrackedResources(ctx context.Context, predicate string) ([]AzureResource, error) {
+func (l *Lister) ListResourcesByIds(ctx context.Context, ids []string) ([]AzureResource, error) {
+	wp := workerpool.NewWorkPool(l.Parallelism)
+
+	var rl []AzureResource
+	wp.Run(func(i interface{}) error {
+		res := i.(AzureResource)
+		rl = append(rl, res)
+		return nil
+	})
+
+	for _, id := range ids {
+		wp.AddTask(func() (interface{}, error) {
+			l.Debug("Get resource by id", "id", id)
+			rid, err := armid.ParseResourceId(id)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse resource id %q: %v", id, err)
+			}
+			schemaEntry := l.GetSchemaEntry(rid)
+			if schemaEntry == nil {
+				return nil, fmt.Errorf("No ARM schema resource type record for resource: %v", id)
+			}
+			apiVersion := schemaEntry.Versions[len(schemaEntry.Versions)-1]
+			resp, err := l.Client.resource.GetByID(ctx, id, apiVersion, nil)
+			if err != nil {
+				return nil, fmt.Errorf("getting resource %q: %v", id, err)
+			}
+
+			b, err := json.Marshal(resp.GenericResource)
+			if err != nil {
+				return nil, fmt.Errorf("marshalling response got from %q: %v", id, err)
+			}
+			var props map[string]interface{}
+			if err := json.Unmarshal(b, &props); err != nil {
+				return nil, fmt.Errorf("unmarshalling %v: %v", string(b), err)
+			}
+
+			return AzureResource{Id: rid, Properties: props}, nil
+		})
+	}
+
+	if err := wp.Done(); err != nil {
+		return nil, err
+	}
+
+	return rl, nil
+}
+
+func (l *Lister) ListResourcesByQuery(ctx context.Context, predicate string) ([]AzureResource, error) {
 	const top int32 = 1000
 
 	query := fmt.Sprintf("%s | where %s | order by id desc", l.ARGTable, predicate)
@@ -461,8 +523,7 @@ func (l *Lister) ListExtensionResource(ctx context.Context, rl []AzureResource) 
 
 // listDirectChildResource list one resource's direct child resources based on the ARM schema resource type hierarchy.
 func (l *Lister) listDirectChildResource(ctx context.Context, wp workerpool.WorkPool, res AzureResource) {
-	rt := strings.ToUpper(strings.TrimLeft(res.Id.RouteScopeString(), "/"))
-	schemaEntry := l.ARMSchemaTree[rt]
+	schemaEntry := l.GetSchemaEntry(res.Id)
 	if schemaEntry == nil {
 		return
 	}
@@ -509,7 +570,7 @@ func (l *Lister) listResource(ctx context.Context, res AzureResource, crt, versi
 		})
 	}
 	l.Debug("Listing child resources by resource type", "parent", pid, "child resource type", crt, "api version", version)
-	pager := l.Client.resource.NewListChildPager(pid, crt, version)
+	pager := l.Client.listresource.NewListChildPager(pid, crt, version)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -533,11 +594,6 @@ func (l *Lister) listResource(ctx context.Context, res AzureResource, crt, versi
 				continue
 			}
 
-			// Resources not meet filter are skipped
-			if filter != nil && !filter(res.Properties, props) {
-				continue
-			}
-
 			idraw, ok := props["id"]
 			if !ok {
 				addListError(pid, crt, version, fmt.Errorf("no resource id found in response: %s", string(b)))
@@ -553,6 +609,12 @@ func (l *Lister) listResource(ctx context.Context, res AzureResource, crt, versi
 				addListError(pid, crt, version, fmt.Errorf("parsing resource id %v: %v", id, err))
 				continue
 			}
+
+			// Resources not meet filter are skipped
+			if filter != nil && !filter(res.Properties, props) {
+				continue
+			}
+
 			result.Resources = append(result.Resources, AzureResource{
 				Id:         azureId,
 				Properties: props,
@@ -560,6 +622,25 @@ func (l *Lister) listResource(ctx context.Context, res AzureResource, crt, versi
 		}
 	}
 	return result, nil
+}
+
+func (l *Lister) GetSchemaEntry(id armid.ResourceId) *ARMSchemaEntry {
+	var rt string
+	switch id.(type) {
+	case *armid.TenantId:
+		return nil
+	case *armid.ManagementGroup:
+		rt = id.TypeString()
+	case *armid.SubscriptionId:
+		// Supprisingly the schema.json define the subscription resource type as below.
+		rt = "Microsoft.Management/managementGroups/subscriptions"
+	case *armid.ResourceGroup:
+		// This is also weird that there is no subscription section.
+		rt = "Microsoft.Resources/resourceGroups"
+	default:
+		rt = id.TypeString()
+	}
+	return l.ARMSchemaTree[strings.ToUpper(rt)]
 }
 
 func BuildARMSchemaTree(armSchemaFile []byte) (ARMSchemaTree, error) {

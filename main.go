@@ -17,8 +17,16 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+type ListType string
+
+const (
+	ListTypeQuery ListType = "query"
+	ListTypeId    ListType = "id"
+)
+
 func main() {
 	var (
+		flagType                        string
 		flagEnvironment                 string
 		flagSubscriptionId              string
 		flagRecursive                   bool
@@ -36,9 +44,16 @@ func main() {
 	app := &cli.App{
 		Name:      "azlist",
 		Version:   getVersion(),
-		Usage:     "List Azure resources by an Azure Resource Graph `where` predicate",
-		UsageText: "azlist [option] <ARG where predicate>",
+		Usage:     "List Azure resources",
+		UsageText: "azlist [option] [<ARG where predicate>|<id>,...]",
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "type",
+				Aliases:     []string{"t"},
+				Usage:       `Specify the list type. Either "query" or "id"`,
+				Destination: &flagType,
+				Value:       "query",
+			},
 			&cli.StringFlag{
 				Name:        "env",
 				EnvVars:     []string{"AZLIST_ENV"},
@@ -99,7 +114,6 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:        "table",
-				Aliases:     []string{"t"},
 				EnvVars:     []string{"AZLIST_TABLE"},
 				Usage:       `The Azure Resource Graph table name. Defaults to "Resources".`,
 				Destination: &flagARGTable,
@@ -126,11 +140,28 @@ func main() {
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			if ctx.NArg() == 0 {
-				return fmt.Errorf("No ARG where predicate specified")
+			var ltype ListType
+			switch flagType {
+			case "query":
+				ltype = ListTypeQuery
+			case "id":
+				ltype = ListTypeId
+			default:
+				return fmt.Errorf("uknown list type: %s", flagType)
 			}
-			if ctx.NArg() > 1 {
-				return fmt.Errorf("More than one where predicates specified")
+
+			switch ltype {
+			case ListTypeQuery:
+				if ctx.NArg() == 0 {
+					return fmt.Errorf("No ARG where predicate specified")
+				}
+				if ctx.NArg() > 1 {
+					return fmt.Errorf("More than one where predicates specified")
+				}
+			case ListTypeId:
+				if ctx.NArg() == 0 {
+					return fmt.Errorf("No resource id specified")
+				}
 			}
 
 			var logger *slog.Logger
@@ -242,7 +273,13 @@ func main() {
 				return err
 			}
 
-			result, err := l.List(ctx.Context, ctx.Args().First())
+			var result *azlist.ListResult
+			switch ltype {
+			case ListTypeQuery:
+				result, err = l.ListByQuery(ctx.Context, ctx.Args().First())
+			case ListTypeId:
+				result, err = l.ListByIds(ctx.Context, ctx.Args().Slice())
+			}
 			if err != nil {
 				return err
 			}
